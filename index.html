@@ -524,6 +524,9 @@ function load(){
         if(d.run&&d.run.events){
           d.run.events = d.run.events.map(e=>EVENTS.find(x=>x&&x.id===e.id)||null).filter(Boolean);
         }
+        // v2.13: 兜底——任何情况下 events 必须是数组（旧/异常存档防御，防止渲染层崩溃）
+        if(d.run&&!Array.isArray(d.run.events)) d.run.events = [];
+        if(d.run&&!Array.isArray(d.run.lastEvents)) d.run.lastEvents = [];
         return d;
       }
     }
