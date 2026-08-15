@@ -1,0 +1,2000 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>仙途·轮回 3D — 修仙增量 Roguelike（three.js 版）</title>
+<style>
+  :root{
+    --gold:#e8c15a; --gold2:#f6d67a; --gold-dim:rgba(232,193,90,.1);
+    --jade:#58c9a3; --red:#e0605a; --cyan:#6ec8e0; --purple:#b48ce8;
+    --txt:#d8d3c5; --muted:#8a8578; --line:rgba(232,193,90,.22); --line2:rgba(232,193,90,.45);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{background:#0b0e18;color:var(--txt);font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif}
+  #sceneWrap{position:fixed;inset:0}
+  canvas{display:block}
+  #vignette{position:fixed;inset:0;pointer-events:none;z-index:5;
+    background:radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(4,5,10,.55) 100%)}
+  #flash{position:fixed;inset:0;pointer-events:none;z-index:6;background:#fff;opacity:0;transition:opacity .12s}
+  #darken{position:fixed;inset:0;pointer-events:none;z-index:4;background:rgba(2,3,8,.72);opacity:0;transition:opacity .8s}
+  #fxText{position:fixed;left:50%;top:30%;transform:translateX(-50%);z-index:20;pointer-events:none;
+    font-family:"STKaiti","KaiTi",serif;font-size:34px;letter-spacing:8px;color:var(--gold2);
+    text-shadow:0 0 30px rgba(232,193,90,.8);opacity:0;white-space:nowrap}
+  #fxText.show{animation:fxUp 2.2s ease-out forwards}
+  @keyframes fxUp{0%{opacity:0;transform:translate(-50%,20px) scale(.8)}18%{opacity:1;transform:translate(-50%,0) scale(1.1)}75%{opacity:1}100%{opacity:0;transform:translate(-50%,-60px) scale(1)}}
+
+  /* ---------- HUD ---------- */
+  header{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+    padding:9px 14px;background:linear-gradient(180deg,rgba(12,15,26,.92),rgba(10,12,18,.75));border-bottom:1px solid var(--line);backdrop-filter:blur(6px)}
+  .title{font-family:"STKaiti","KaiTi",serif;font-size:20px;color:var(--gold2);letter-spacing:3px;text-shadow:0 0 16px rgba(232,193,90,.35);white-space:nowrap}
+  .title .sub{font-size:10.5px;color:var(--muted);letter-spacing:1px;margin-left:6px;font-family:"Microsoft YaHei",sans-serif}
+  .hud-row{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+  .hud-stat{font-size:12.5px;color:var(--muted)}
+  .hud-stat b{color:var(--txt);margin-left:2px}
+  .realm-chip{font-family:"STKaiti","KaiTi",serif;font-size:14px;padding:2px 12px;border-radius:20px;border:1px solid var(--line2);background:var(--gold-dim);color:var(--gold2)}
+  .realm-chip.r1{color:#9fe8c8;border-color:rgba(88,201,163,.5);background:rgba(88,201,163,.1)}
+  .realm-chip.r2{color:#f0d070;border-color:rgba(240,208,112,.5);background:rgba(240,208,112,.1)}
+  .realm-chip.r3{color:#c9a6f0;border-color:rgba(180,140,232,.5);background:rgba(180,140,232,.1)}
+  .realm-chip.r4{color:#f0a070;border-color:rgba(240,160,112,.5);background:rgba(240,160,112,.1)}
+  .realm-chip.r5{color:#7adce8;border-color:rgba(110,200,224,.5);background:rgba(110,200,224,.1)}
+  .realm-chip.r6{color:#f0e8d0;border-color:rgba(240,232,208,.5);background:rgba(240,232,208,.08)}
+  .realm-chip.r7{color:#ffd98a;border-color:rgba(255,217,138,.6);background:rgba(255,180,60,.12)}
+  .realm-chip.r8{color:#d8a8ff;border-color:rgba(216,168,255,.55);background:rgba(150,80,220,.14)}
+  .realm-chip.r9{color:#fff;border-color:rgba(255,215,0,.75);background:linear-gradient(135deg,rgba(255,215,0,.18),rgba(180,140,232,.18))}
+  .lifebox{display:flex;align-items:center;gap:7px;flex:1;min-width:190px;max-width:320px}
+  .lifebox>span{font-size:11.5px;color:var(--muted);white-space:nowrap}
+  .bar{flex:1;height:8px;border-radius:6px;background:rgba(255,255,255,.07);overflow:hidden;border:1px solid rgba(255,255,255,.06)}
+  .bar>div{height:100%;border-radius:6px;background:linear-gradient(90deg,#3fae82,#7fe0b4);transition:width .25s;box-shadow:0 0 8px rgba(88,201,163,.5)}
+  .bar>div.warn{background:linear-gradient(90deg,#c0463f,#e88a5a);box-shadow:0 0 8px rgba(224,96,90,.5)}
+  .bar>div.gold{background:linear-gradient(90deg,#b8860b,#f0d070);box-shadow:0 0 8px rgba(232,193,90,.5)}
+  .lifebox b{font-size:11.5px;color:var(--gold2);white-space:nowrap;min-width:62px;text-align:right}
+  .btn{padding:6px 12px;border:1px solid var(--line2);border-radius:8px;background:var(--gold-dim);color:var(--gold2);font-size:12.5px;cursor:pointer;transition:all .15s;font-family:inherit}
+  .btn:hover:not(:disabled){background:rgba(232,193,90,.22)}
+  .btn:disabled{opacity:.32;cursor:not-allowed}
+  .btn-primary{background:linear-gradient(135deg,#a67c14,#e8c15a);color:#1c1305;font-weight:700;border-color:#f6d67a}
+  .btn-primary:hover:not(:disabled){filter:brightness(1.12)}
+  .btn-danger{background:rgba(224,96,90,.12);border-color:rgba(224,96,90,.5);color:#e88a82}
+  .btn-small{padding:4px 9px;font-size:11.5px;border-radius:6px}
+  .btn-pulse{animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 6px rgba(232,193,90,.25)}50%{box-shadow:0 0 20px rgba(232,193,90,.6)}}
+
+  /* ---------- 面板 ---------- */
+  .panel{position:fixed;z-index:20;background:rgba(13,17,28,.82);border:1px solid var(--line);border-radius:14px;
+    padding:12px;backdrop-filter:blur(8px);box-shadow:0 8px 40px rgba(0,0,0,.5)}
+  #leftPanel{left:12px;bottom:12px;width:330px;max-width:calc(100vw - 24px);max-height:78vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+  #rightPanel{right:12px;top:64px;width:300px;max-width:calc(100vw - 24px);max-height:calc(100vh - 84px);overflow-y:auto}
+  .panel.collapsed{display:none}
+  .card-title{font-family:"STKaiti","KaiTi",serif;font-size:15px;color:var(--gold2);letter-spacing:2px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .card-title::before{content:"";width:4px;height:13px;background:linear-gradient(180deg,var(--gold2),#8a6a1f);border-radius:2px;display:inline-block}
+  .med-row{display:flex;gap:12px;align-items:center}
+  .medallion{position:relative;width:92px;height:92px;border-radius:50%;border:none;cursor:pointer;flex-shrink:0;
+    background:radial-gradient(circle at 35% 30%, #2a2414, #14100a 70%);
+    box-shadow:inset 0 0 18px rgba(232,193,90,.25), 0 0 18px rgba(232,193,90,.18), 0 4px 14px rgba(0,0,0,.5);
+    color:var(--gold2);font-family:"STKaiti","KaiTi",serif;font-size:17px;letter-spacing:3px;transition:transform .08s}
+  .medallion::before{content:"";position:absolute;inset:5px;border-radius:50%;border:1px solid rgba(232,193,90,.5)}
+  .medallion:active{transform:scale(.93)}
+  .medallion .ripple{position:absolute;inset:0;border-radius:50%;border:2px solid var(--gold2);animation:rip .6s ease-out forwards;pointer-events:none}
+  @keyframes rip{from{transform:scale(.85);opacity:.9}to{transform:scale(1.4);opacity:0}}
+  .med-info{font-size:12px;color:var(--muted);line-height:1.9}
+  .med-info b{color:var(--txt)}
+  .med-info .q{color:var(--jade);font-weight:600}
+  .med-info .x{color:var(--gold2);font-weight:600}
+  .bar-row{display:flex;align-items:center;gap:9px;margin:8px 0}
+  .bar-row>span{font-size:12.5px;color:var(--muted);white-space:nowrap;width:32px}
+  .bar-row b{font-size:11.5px;color:var(--gold2);white-space:nowrap;min-width:100px;text-align:right}
+  .trib-panel{margin-top:8px;border:1px dashed rgba(200,140,255,.45);background:rgba(120,70,180,.1);border-radius:10px;padding:10px}
+  .trib-panel .t-title{color:#d8a8ff;font-size:13.5px;margin-bottom:6px;font-family:"STKaiti","KaiTi",serif;letter-spacing:1px}
+  .trib-stats{font-size:12.5px;line-height:1.85;color:var(--muted)}
+  .trib-stats b{color:var(--txt)}
+  .trib-stats .rate{color:#ffd98a;font-size:14px}
+  .trib-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  #log{max-height:120px;overflow-y:auto;padding-right:4px}
+  #log::-webkit-scrollbar{width:4px}
+  #log::-webkit-scrollbar-thumb{background:rgba(232,193,90,.3);border-radius:3px}
+  .log-item{font-size:11.5px;line-height:1.5;padding:3px 7px;margin-bottom:4px;border-left:2px solid #555;background:rgba(255,255,255,.025);border-radius:0 5px 5px 0}
+  .log-item.l-gain{border-color:var(--gold);color:#d8c48a}
+  .log-item.l-loss{border-color:var(--red);color:#e0a29d}
+  .log-item.l-event{border-color:var(--cyan);color:#9fd4e4}
+  .log-item.l-battle{border-color:#e8a15a;color:#e0b48a}
+  .log-item.l-trib{border-color:var(--purple);color:#c9a6f0}
+  .log-item.l-dao{border-color:var(--jade);color:#9fe0c4}
+  .log-item.l-sys{color:var(--muted)}
+  /* ---------- 妖兽预警条（v1.1） ---------- */
+  #beastWarnBar{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:40;display:none;
+    background:rgba(30,20,14,.92);border:1px solid rgba(232,160,90,.55);border-radius:10px;padding:8px 14px;
+    min-width:320px;max-width:calc(100vw - 24px);backdrop-filter:blur(6px);box-shadow:0 6px 30px rgba(0,0,0,.5)}
+  #beastWarnBar.show{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .bw-text{font-size:13px;color:#f0c8a0;flex:1;min-width:180px}
+  .bw-text b{color:#ffd98a}
+  .bw-actions{display:flex;gap:6px}
+  .bw-bar{position:absolute;left:0;bottom:-3px;height:3px;width:100%;background:rgba(255,255,255,.08);border-radius:0 0 10px 10px;overflow:hidden}
+  .bw-bar>div{height:100%;background:linear-gradient(90deg,#e8a15a,#e0605a);transition:width .2s linear}
+  .tabs{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap}
+  .tab{padding:6px 12px;border-radius:7px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12.5px;cursor:pointer;font-family:inherit}
+  .tab.on{background:var(--gold-dim);color:var(--gold2);border-color:var(--line2)}
+  .row{display:flex;align-items:center;gap:9px;padding:8px 2px;border-bottom:1px dashed rgba(255,255,255,.06)}
+  .row:last-child{border-bottom:none}
+  .row .info{flex:1;min-width:0}
+  .row .info .n{font-size:13px;color:var(--txt);font-weight:600}
+  .row .info .d{font-size:11px;color:var(--muted);margin-top:1px;line-height:1.5}
+  .row .lv{font-size:11.5px;color:var(--gold2);white-space:nowrap}
+  .row .cost{font-size:11.5px;color:var(--jade);white-space:nowrap;min-width:62px;text-align:right}
+  .row .cost.no{color:var(--red)}
+  .hint{font-size:11px;color:var(--muted);line-height:1.6;margin-top:8px;padding-top:7px;border-top:1px dashed rgba(255,255,255,.08)}
+  .status-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+  .chip{font-size:10.5px;padding:2px 8px;border-radius:11px;border:1px solid rgba(255,255,255,.14);color:var(--muted)}
+  .chip.on-gold{border-color:rgba(232,193,90,.5);color:var(--gold2);background:rgba(232,193,90,.08)}
+  .chip.on-red{border-color:rgba(224,96,90,.55);color:#e88a82;background:rgba(224,96,90,.08)}
+  .chip.on-jade{border-color:rgba(88,201,163,.5);color:var(--jade);background:rgba(88,201,163,.08)}
+  .panel-toggle{position:fixed;z-index:25;bottom:12px;right:12px;display:none}
+
+  /* ---------- Modal ---------- */
+  .overlay{position:fixed;inset:0;z-index:60;background:rgba(4,5,9,.78);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:16px}
+  .overlay.hidden{display:none}
+  .modal{width:min(540px,94vw);max-height:88vh;overflow-y:auto;background:rgba(18,22,36,.96);border:1px solid var(--line2);border-radius:16px;padding:20px;box-shadow:0 20px 70px rgba(0,0,0,.6)}
+  .m-title{font-family:"STKaiti","KaiTi",serif;font-size:23px;color:var(--gold2);text-align:center;letter-spacing:6px;margin-bottom:6px;text-shadow:0 0 20px rgba(232,193,90,.35)}
+  .m-title.win{color:#ffd98a;font-size:27px;text-shadow:0 0 30px rgba(255,215,0,.5)}
+  .m-sub{text-align:center;color:var(--muted);font-size:12.5px;margin-bottom:14px}
+  .m-stats{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:12px 0}
+  .m-stat{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:9px 10px;text-align:center}
+  .m-stat .k{font-size:11px;color:var(--muted)}
+  .m-stat .v{font-size:16px;color:var(--gold2);margin-top:2px;font-weight:700}
+  .m-stat .v.j{color:var(--jade)}
+  .dao-big{text-align:center;font-size:14px;color:var(--jade);margin:9px 0;line-height:1.8}
+  .dao-big b{font-size:24px;color:var(--jade);text-shadow:0 0 16px rgba(88,201,163,.5)}
+  .divider{height:1px;background:linear-gradient(90deg,transparent,rgba(232,193,90,.4),transparent);margin:14px 0}
+  .meta-row{display:flex;align-items:center;gap:9px;padding:8px 2px;border-bottom:1px dashed rgba(255,255,255,.06)}
+  .meta-row:last-child{border-bottom:none}
+  .meta-row .info{flex:1}
+  .meta-row .info .n{font-size:13px;color:var(--txt);font-weight:600}
+  .meta-row .info .d{font-size:11px;color:var(--muted)}
+  .meta-row .cost{font-size:11.5px;color:var(--jade);min-width:54px;text-align:right}
+  .meta-row .cost.no{color:var(--red)}
+  .center{text-align:center;margin-top:14px}
+  .m-btn{font-size:15px;padding:11px 30px;border-radius:12px;letter-spacing:4px;font-family:"STKaiti","KaiTi",serif}
+  .boon-grid{display:grid;grid-template-columns:1fr;gap:9px;margin-top:12px}
+  .boon{background:rgba(255,255,255,.03);border:1px solid rgba(232,193,90,.35);border-radius:12px;padding:13px;cursor:pointer;text-align:left;transition:all .15s;color:var(--txt);font-family:inherit;font-size:13.5px}
+  .boon:hover{border-color:var(--gold2);background:rgba(232,193,90,.09)}
+  .boon .bn{font-size:14.5px;color:var(--gold2);font-weight:700;margin-bottom:3px}
+  .boon .bd{font-size:12px;color:var(--muted);line-height:1.6}
+  .evt-modal .modal{border-color:rgba(110,200,224,.45)}
+  .evt-title{font-family:"STKaiti","KaiTi",serif;font-size:19px;color:#9fd4e4;letter-spacing:3px;margin-bottom:8px}
+  .evt-desc{font-size:13px;color:var(--txt);line-height:1.8;margin-bottom:13px}
+  .evt-choice{display:block;width:100%;text-align:left;padding:10px 13px;margin-bottom:7px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.03);color:var(--txt);font-size:13px;cursor:pointer;transition:all .15s;font-family:inherit}
+  .evt-choice:hover:not(:disabled){border-color:var(--cyan);background:rgba(110,200,224,.1)}
+  .evt-choice:disabled{opacity:.35;cursor:not-allowed}
+  .evt-dismiss{display:block;margin:5px auto 0;background:none;border:none;color:var(--muted);font-size:11.5px;cursor:pointer;font-family:inherit}
+  .help-list{font-size:13px;line-height:2;color:var(--txt)}
+  .help-list b{color:var(--gold2)}
+  #noWebgl{position:fixed;inset:0;z-index:99;display:none;align-items:center;justify-content:center;background:#0b0e18;color:var(--txt);font-size:15px;text-align:center;padding:30px;line-height:2}
+  @media (max-width:900px){
+    .title{font-size:16px}
+    #rightPanel{left:12px;right:12px;width:auto;top:auto;bottom:64px;max-height:46vh}
+    .panel-toggle{display:block}
+  }
+</style>
+</head>
+<body>
+<div id="sceneWrap"></div>
+<div id="vignette"></div>
+<div id="darken"></div>
+<div id="flash"></div>
+<div id="fxText"></div>
+
+<header>
+  <div class="title">仙途·轮回<span class="sub">3D · 增量 × Roguelike</span></div>
+  <div class="hud-row">
+    <span id="realmBadge" class="realm-chip">练气一层</span>
+    <span class="hud-stat">战力 <b id="statPower">0</b></span>
+    <span class="hud-stat">灵石 <b id="statStone">0</b></span>
+    <span class="hud-stat">道果 <b id="statDao">0</b></span>
+    <span class="hud-stat" id="statDate">甲子年 正月</span>
+  </div>
+  <div class="lifebox">
+    <span>寿元</span>
+    <div class="bar"><div id="lifeFill"></div></div>
+    <b id="lifeText">0 / 0 年</b>
+  </div>
+  <button class="btn btn-small" id="btnHelp">说明</button>
+  <button class="btn btn-small" id="btnFeedback">反馈</button>
+  <button class="btn btn-small btn-danger" id="btnGiveUp">兵解</button>
+</header>
+
+<div class="panel" id="leftPanel">
+  <div>
+    <div class="card-title">修炼</div>
+    <div class="med-row">
+      <button class="medallion" id="btnMeditate">吐纳</button>
+      <div class="med-info">
+        <div>灵气 <b class="q" id="qiRate">0</b>/秒 → 修为 <b class="x" id="xiuRate">0</b>/秒</div>
+        <div>吐纳：灵石 +<b id="clickStone">0</b>，修为 +<b id="clickXiu">0</b></div>
+        <div style="font-size:10.5px;color:#5a5648">1 秒 ≈ 1 月 · 拖拽转视角，滚轮缩放</div>
+      </div>
+    </div>
+    <div class="bar-row">
+      <span>修为</span>
+      <div class="bar"><div id="xiuFill" class="gold"></div></div>
+      <b id="xiuText">0 / 0</b>
+    </div>
+    <button class="btn btn-primary btn-pulse" id="btnBreak" style="width:100%">突破</button>
+    <div class="trib-panel hidden" id="tribPanel" style="display:none">
+      <div class="t-title">⚡ 天劫将至</div>
+      <div class="trib-stats" id="tribStats"></div>
+      <div class="trib-actions">
+        <button class="btn btn-primary" id="btnTrib">引动天劫</button>
+        <button class="btn" id="btnTribWait">再修一修</button>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="card-title">修行日志</div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<div class="panel" id="rightPanel">
+  <div class="tabs">
+    <button class="tab on" data-a="tab:arts">洞府</button>
+    <button class="tab" data-a="tab:pills">丹药</button>
+    <button class="tab" data-a="tab:relics">法宝</button>
+  </div>
+  <div id="tabBody"></div>
+</div>
+<button class="btn btn-small panel-toggle" id="btnToggleR">☰ 商店</button>
+
+<div class="overlay hidden" id="evtOverlay"><div class="modal evt-modal" id="evtModal"></div></div>
+<div class="overlay" id="endOverlay"><div class="modal" id="endModal"></div></div>
+<div class="overlay hidden" id="boonOverlay"><div class="modal" id="boonModal"></div></div>
+<div class="overlay hidden" id="helpOverlay"><div class="modal">
+  <div class="m-title">玩法说明</div>
+  <div class="m-sub">3D 版 · 一炷香看懂这个轮回</div>
+  <div class="help-list">
+    <div>1. <b>吐纳修炼</b>：点击金色圆盘得灵石，灵气自动转化修为。</div>
+    <div>2. <b>升级洞府</b>：聚灵阵/洞府提产出，御剑诀提战力（右下面板）。</div>
+    <div>3. <b>突破渡劫</b>：修为攒满即可突破；跨大境界引天劫，看左上角成功率，失败可能兵解。</div>
+    <div>4. <b>境界换装</b>：每破一大境界，小人的道袍、发冠、光环、飞剑都会变化——金丹起有光环，元婴起有元婴虚影，化神起有披风，炼虚起有环绕飞剑。</div>
+    <div>5. <b>奇遇抉择</b>：弹出的机缘事件选对了起飞，选错了折寿。</div>
+    <div>6. <b>兵解轮回</b>：寿元耗尽或渡劫失败 → 结算道果，在轮回殿永久强化，再入轮回。</div>
+    <div style="color:var(--muted)">视角：鼠标拖拽旋转 · 滚轮缩放 · 目标：渡劫飞升成仙。</div>
+  </div>
+  <div class="center"><button class="btn" id="btnHelpClose">知道了</button></div>
+</div></div>
+
+<div id="noWebgl">当前浏览器不支持 WebGL 或加载 three.js 失败。<br>请使用新版 Chrome / Edge / Firefox 打开。<br>若文件与 assets/three.min.js 不在同一目录也会导致加载失败。</div>
+
+<script src="assets/three.min.js"></script>
+<script>
+/* ====CORE-BEGIN==== */
+'use strict';
+/* ---------- 存储守卫 ---------- */
+function storeGet(k){ try{ if(typeof localStorage!=='undefined') return localStorage.getItem(k); }catch(e){} return null; }
+function storeSet(k,v){ try{ if(typeof localStorage!=='undefined') localStorage.setItem(k,v); }catch(e){} }
+function storeDel(k){ try{ if(typeof localStorage!=='undefined') localStorage.removeItem(k); }catch(e){} }
+const SAVE_KEY = 'xianxia-3d-v1';
+
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const fmt = n => {
+  n = Math.floor(n);
+  if (n >= 1e8) return (n / 1e8).toFixed(2) + '亿';
+  if (n >= 1e4) return (n / 1e4).toFixed(2) + '万';
+  return n.toLocaleString();
+};
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+/* ---------- 静态数据 ---------- */
+const REALMS = [
+  { n: '练气', layers: 9, base: 10 },
+  { n: '筑基', layers: 3, base: 400 },
+  { n: '金丹', layers: 3, base: 3200 },
+  { n: '元婴', layers: 3, base: 25000 },
+  { n: '化神', layers: 3, base: 160000 },
+  { n: '炼虚', layers: 3, base: 550000 },
+  { n: '合体', layers: 3, base: 2800000 },
+  { n: '大乘', layers: 3, base: 6400000 },
+  { n: '渡劫', layers: 2, base: 13000000 },
+  { n: '飞升', layers: 0, base: 0 }
+];
+const REALM_POW = [1, 3, 7, 16, 38, 90, 210, 500, 1200, 3000];
+const REALM_XIU = [1, 2, 5, 12, 30, 75, 200, 500, 1500];
+const CN = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
+const TG = '甲乙丙丁戊己庚辛壬癸', DZ = '子丑寅卯辰巳午未申酉戌亥';
+const GZ = Array.from({ length: 60 }, (_, i) => TG[i % 10] + DZ[i % 12]);
+const MOONS = ['正月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '冬月', '腊月'];
+
+const ARTS = {
+  zhen:   { n: '聚灵阵',     d: '灵气产出 +60%/级', base: 30,  mul: 1.5, max: 20 },
+  dongfu: { n: '洞府扩建',   d: '灵气产出 +25%/级', base: 80,  mul: 1.55, max: 15 },
+  yujian: { n: '御剑诀',     d: '战力 +8/级',       base: 40,  mul: 1.5, max: 20 },
+  jingang:{ n: '金刚不坏',   d: '战力 +4/级',       base: 100, mul: 1.5, max: 15 },
+  xinfa:  { n: '吐纳心法',   d: '吐纳收益 +50%/级', base: 60,  mul: 1.6, max: 10 },
+  danlu:  { n: '丹炉精进',   d: '丹药价格 -8%/级',  base: 200, mul: 1.8, max: 10 }
+};
+const PILLS = {
+  juqi:    { n: '聚气丹',   d: '灵气 ×2，持续 90 秒',    base: 50 },
+  zengshou:{ n: '增寿丹',   d: '寿元 +15 年',            base: 150 },
+  wudao:   { n: '悟道丹',   d: '修为转化 ×2，持续 90 秒', base: 100 },
+  huichun: { n: '回春丹',   d: '治愈重伤',               base: 80 },
+  tianlei: { n: '天雷淬体丹', d: '下次天劫威力 -35%',    base: 200 }
+};
+const RELIC_DEFS = {
+  qingfeng: { n: '青锋剑', d: '战力 +30%' },
+  xuangui:  { n: '玄龟甲', d: '天劫威力 -20%' },
+  zhuli:    { n: '聚灵珠', d: '灵气产出 +25%' },
+  qiankun:  { n: '乾坤袋', d: '灵石获得 +50%' },
+  tifu:     { n: '替死符', d: '渡劫失败免死一次（消耗）' }
+};
+const META = {
+  linggen: { n: '灵根提纯', d: '灵气产出 +10%/级', base: 60, mul: 2.0, max: 15 },
+  wuxing:  { n: '道心通明', d: '修为转化 +8%/级',  base: 60, mul: 2.0, max: 15 },
+  fuyuan:  { n: '福缘深厚', d: '更易遇到罕见机缘', base: 50, mul: 2.0, max: 10 },
+  jieyun:  { n: '劫运护体', d: '天劫威力 -4%/级',  base: 80, mul: 2.0, max: 10 },
+  shouyuan:{ n: '寿元根基', d: '初始寿元 +5年/级', base: 40, mul: 2.0, max: 10 },
+  jiadi:   { n: '家底殷实', d: '初始灵石 +100/级', base: 40, mul: 2.0, max: 10 },
+  chuanjia:{ n: '传家宝',   d: '开局 +1 聚气丹/级', base: 50, mul: 2.4, max: 5 }
+};
+const BOONS = [
+  { id: 'linggen', n: '上品灵根', d: '本世灵气产出 ×2' },
+  { id: 'jianjue', n: '传承剑诀', d: '本世战力 +50%' },
+  { id: 'tifu',    n: '替死符',   d: '获得 1 枚替死符，渡劫失败可免死一次' },
+  { id: 'lingshi', n: '灵石袋',   d: '开局 +200 灵石' },
+  { id: 'yaohulu', n: '丹药葫芦', d: '开局 聚气丹×1、悟道丹×1' },
+  { id: 'xuangui', n: '玄龟护符', d: '本世天劫威力 -20%' }
+];
+const BEASTS = ['噬魂狼', '血瞳鸦', '赤炎蟒', '幽冥豹', '铁背猿', '玄冰蛛', '石甲犀', '九尾狐妖', '金翅雕', '毒牙蜥'];
+
+/* ---------- 事件池 ---------- */
+const EVENTS = [
+  { id:'dongfu', tier:'n', title:'神秘洞府', desc:'山腹裂开一道缝隙，隐有灵光透出，似为上古修士坐化之所。',
+    choices:[
+      { label:()=>'入内一探', need:()=>true, fn:()=>{
+        const roll=Math.random();
+        if(roll<0.5){ const s=gainStone(300); hooks.onLog('在洞府中寻得散落灵石 ×'+s+'，可惜未见功法秘籍。','gain'); }
+        else if(roll<0.78){ const rel=giveRandomRelic(); hooks.onLog('洞府深处供奉着一件法宝：『'+rel+'』！','gain'); }
+        else { loseLife(96); hooks.onLog('触发了洞府禁制，被雷光击中，寿元折损 8 年。','loss'); }
+      }},
+      { label:()=>'谨慎退走', need:()=>true, fn:()=>{ const s=gainStone(60); hooks.onLog('只在洞口拾到零散灵石 ×'+s+'，全身而退。','gain'); } }
+    ]},
+  { id:'shangren', tier:'n', title:'游方商人', desc:'一位灰袍商人出现在山道，笑称「只卖有缘之物」。',
+    choices:[
+      { label:()=>'买 增寿丹（'+fmt(pillPrice('zengshou'))+' 灵石）', need:()=>G.run.lingshi>=pillPrice('zengshou'), fn:()=>{ spendStone(pillPrice('zengshou')); givePill('zengshou'); hooks.onLog('购得增寿丹一枚。','gain'); } },
+      { label:()=>'买 聚气丹（'+fmt(pillPrice('juqi'))+' 灵石）', need:()=>G.run.lingshi>=pillPrice('juqi'), fn:()=>{ spendStone(pillPrice('juqi')); givePill('juqi'); hooks.onLog('购得聚气丹一枚。','gain'); } },
+      { label:()=>'买 替死符（'+fmt(pillPrice('zengshou')*2)+' 灵石）', need:()=>G.run.relics.tifu<1&&G.run.lingshi>=pillPrice('zengshou')*2, fn:()=>{ spendStone(pillPrice('zengshou')*2); G.run.relics.tifu++; hooks.onLog('购得替死符一枚，保命之物。','gain'); } },
+      { label:()=>'买 玄龟甲（'+fmt(pillPrice('zengshou')*4)+' 灵石）', need:()=>!G.run.relics.xuangui&&G.run.lingshi>=pillPrice('zengshou')*4, fn:()=>{ spendStone(pillPrice('zengshou')*4); G.run.relics.xuangui=true; hooks.onLog('购得玄龟甲，渡劫时妖力难侵（天劫威力 -20%）。','gain'); } },
+      { label:()=>'作别', need:()=>true, fn:()=>{ hooks.onLog('与商人拱手作别。','sys'); } }
+    ]},
+  { id:'xinmo', tier:'n', title:'心魔窥伺', desc:'夜深人静，丹田之中忽然翻涌，一道声音在你心底响起：「修行何用？」',
+    choices:[
+      { label:()=>'固守心神', need:()=>true, fn:()=>{ gainXiu(needXiu()*0.4); hooks.onLog('默诵清心诀，心魔退散，修为精进（+40% 当前所需）。','gain'); } },
+      { label:()=>'直面心魔', need:()=>true, fn:()=>{
+        if(Math.random()<0.6){ G.run.buffPower=Math.max(G.run.buffPower,120); hooks.onLog('斩破心魔！战意如虹，战力 +25%（120 秒）。','gain'); }
+        else { loseLife(36); G.run.injured=Math.max(G.run.injured,45); hooks.onLog('被心魔所伤，走火入魔，寿元 -3 年，陷入重伤。','loss'); }
+      } }
+    ]},
+  { id:'lingyao', tier:'n', title:'灵药园', desc:'山谷中竟有一片野生药园，紫芝、黄精、龙涎草长势喜人。',
+    choices:[
+      { label:()=>'采药换钱', need:()=>true, fn:()=>{ loseLife(24); const s=gainStone(150); hooks.onLog('采药耗去 2 年光阴，换得灵石 ×'+s+'。','gain'); } },
+      { label:()=>'移植洞府', need:()=>true, fn:()=>{
+        if(G.run.plant){ hooks.onLog('你已移植过灵药园，此行空手而归。','sys'); }
+        else { G.run.plant=true; hooks.onLog('将灵药移栽至洞府，本世灵气产出 +15%。','gain'); }
+      } }
+    ]},
+  { id:'yaoshou', tier:'n', title:'妖兽巢穴', desc:'一处妖气冲天的巢穴，隐约可见妖兽皮毛与枯骨。',
+    choices:[
+      { label:()=>'出手清剿', need:()=>true, fn:()=>{
+        const bp=Math.round(power()*1.1*rnd(0.9,1.3));
+        if(power()>=bp){ const s=gainStone(250); addLife(24); hooks.onLog('斩杀妖王，灵石 ×'+s+'，寿元 +2 年。','battle'); }
+        else { loseLife(12); G.run.injured=Math.max(G.run.injured,45); hooks.onLog('巢穴深处另有老妖！重伤逃遁，寿元 -1 年。','loss'); }
+      } },
+      { label:()=>'绕道而行', need:()=>true, fn:()=>{ hooks.onLog('多一事不如少一事，绕行而过。','sys'); } }
+    ]},
+  { id:'canbei', tier:'r', title:'上古残碑', desc:'荒山之上立着一块残破石碑，刻满云纹古篆，隐隐有大道之音。',
+    choices:[
+      { label:()=>'盘坐参悟', need:()=>true, fn:()=>{ gainXiu(needXiu()*(1.2+G.meta.wuxing*0.05)); hooks.onLog('参悟残碑，修为大涨。','gain'); } },
+      { label:()=>'拓印带走', need:()=>true, fn:()=>{
+        if(G.run.stele){ hooks.onLog('你已拓印过残碑，并无新得。','sys'); }
+        else { G.run.stele=true; hooks.onLog('拓下碑文，本世修为转化 +15%。','gain'); }
+      } }
+    ]},
+  { id:'lingyu', tier:'r', title:'天降灵雨', desc:'乌云汇聚，雨滴竟泛着灵光，落在身上如沐仙泉。',
+    choices:[
+      { label:()=>'沐浴灵雨', need:()=>true, fn:()=>{ gainXiu(needXiu()*1.2); addLife(36); hooks.onLog('灵雨灌顶，修为大涨，寿元 +3 年。','gain'); } },
+      { label:()=>'收集灵液', need:()=>true, fn:()=>{ const s=gainStone(400); hooks.onLog('以玉瓶接取灵液，售得灵石 ×'+s+'。','gain'); } }
+    ]},
+  { id:'yiti', tier:'r', title:'前辈遗蜕', desc:'枯藤之下，一具端坐的骸骨衣冠如新，膝前放着一只玉匣。',
+    choices:[
+      { label:()=>'恭敬祭拜', need:()=>true, fn:()=>{
+        addLife(24); const s=gainStone(100); G.run.buffXiu=Math.max(G.run.buffXiu,60);
+        hooks.onLog('三拜九叩，前辈残念入梦指点：修为转化 ×2（60 秒），另得灵石 ×'+s+'、寿元 +2 年。','gain');
+      } },
+      { label:()=>'搜刮遗物', need:()=>true, fn:()=>{
+        if(Math.random()<0.6){ const rel=giveRandomRelic(); hooks.onLog('玉匣中正是『'+rel+'』！','gain'); }
+        else { G.run.curse=true; loseLife(12); hooks.onLog('玉匣里飞出黑气缠身：下次天劫威力 +30%，寿元 -1 年。','loss'); }
+      } }
+    ]},
+  { id:'qiaofu', tier:'n', title:'老樵夫论道', desc:'山下遇到一个砍柴老人，聊起修行，竟句句直指大道。',
+    choices:[
+      { label:()=>'虚心请教', need:()=>true, fn:()=>{ G.run.buffXiu=Math.max(G.run.buffXiu,90); hooks.onLog('樵夫一席话如醍醐灌顶：修为转化 ×2（90 秒）。','gain'); } },
+      { label:()=>'手谈一局', need:()=>true, fn:()=>{
+        if(Math.random()<0.5){ const s=gainStone(200); hooks.onLog('连赢三局，樵夫愿赌服输，灵石 ×'+s+'。','gain'); }
+        else { hooks.onLog('棋差一着，输得心服口服。','sys'); }
+      } }
+    ]},
+  { id:'jianzhong', tier:'l', title:'剑冢', desc:'万剑插于荒丘，剑鸣如雷。冢心一柄古剑青光冲霄，似乎在等你。',
+    choices:[
+      { label:()=>'拔取古剑', need:()=>true, fn:()=>{
+        if(Math.random()<0.6){
+          if(!G.run.relics.qingfeng){ G.run.relics.qingfeng=true; hooks.onLog('古剑认主！获得『青锋剑』，战力 +30%。','gain'); }
+          else { G.run.buffPower=Math.max(G.run.buffPower,180); hooks.onLog('剑意灌体！战力 +25%（180 秒）。','gain'); }
+        } else { loseLife(48); G.run.injured=Math.max(G.run.injured,60); hooks.onLog('古剑反噬，剑气入体，重伤，寿元 -4 年。','loss'); }
+      } },
+      { label:()=>'观摩剑意', need:()=>true, fn:()=>{ G.run.buffPower=Math.max(G.run.buffPower,180); hooks.onLog('盘坐三日，悟得一丝剑意，战力 +25%（180 秒）。','gain'); } }
+    ]},
+  { id:'pantao', tier:'l', title:'蟠桃残宴', desc:'云开雾散，半空竟悬着一桌残宴，一颗蟠桃犹自生辉。',
+    choices:[
+      { label:()=>'享用蟠桃', need:()=>true, fn:()=>{ addLife(300); hooks.onLog('一口蟠桃入腹，寿元 +25 年，通体舒泰。','gain'); } },
+      { label:()=>'打包带走', need:()=>true, fn:()=>{ const s=gainStone(800); hooks.onLog('以玉匣收好蟠桃，换得灵石 ×'+s+'。','gain'); } }
+    ]},
+  { id:'tianming', tier:'l', title:'天庭遗址', desc:'一场雷暴后，云海中浮现出半座白玉宫殿，仙气缭绕。',
+    choices:[
+      { label:()=>'悟道碑前修行', need:()=>true, fn:()=>{ gainXiu(needXiu()*3); hooks.onLog('道碑神韵入体，修为暴涨！','gain'); } },
+      { label:()=>'搜刮藏宝阁', need:()=>true, fn:()=>{ const s=gainStone(1200); givePill('tianlei'); hooks.onLog('得灵石 ×'+s+' 与天雷淬体丹一枚！','gain'); } },
+      { label:()=>'踏入传送阵', need:()=>G.run.layer<REALMS[G.run.realm].layers-1, fn:()=>{
+        const need=needXiu(); G.run.xiuwei-=need; G.run.layer++; G.run.stats.layers++;
+        hooks.onLog('传送阵光华一闪，你直接突破至 '+realmName()+'！','trib');
+      } }
+    ]}
+];
+
+/* ---------- 回调钩子（渲染层注入） ---------- */
+const hooks = {
+  onLog(){}, onEvent(){}, onBeast(){}, onBeastWarn(){}, onTribOpen(){}, onTrib(){},
+  onRealm(){}, onDeath(){}, onStart(){}, onPill(){}, onBoon(){}
+};
+
+/* ---------- 存档 ---------- */
+function defaultMeta(){ return { dao:0, linggen:0, wuxing:0, fuyuan:0, jieyun:0, shouyuan:0, jiadi:0, chuanjia:0, runs:0 }; }
+function load(){
+  try{
+    const raw=storeGet(SAVE_KEY);
+    if(raw){
+      const d=JSON.parse(raw);
+      if(d&&d.meta){
+        if(d.run&&d.run.pendingEvent&&d.run.pendingEvent.id){
+          // 反序列化后重新挂载完整事件对象（函数不可序列化）
+          d.run.pendingEvent = EVENTS.find(e=>e.id===d.run.pendingEvent.id) || null;
+        }
+        return d;
+      }
+    }
+  }catch(e){}
+  return { v:1, meta:defaultMeta(), run:null };
+}
+let G = load();
+function save(){
+  try{
+    if(G.run&&G.run.pendingEvent){
+      const copy=JSON.parse(JSON.stringify(G));
+      copy.run.pendingEvent={ id:G.run.pendingEvent.id };
+      storeSet(SAVE_KEY, JSON.stringify(copy));
+    } else {
+      storeSet(SAVE_KEY, JSON.stringify(G));
+    }
+  }catch(e){}
+}
+
+/* ---------- 派生数值 ---------- */
+function qiPerSec(){
+  const r=G.run; if(!r) return 0;
+  let q=6*r.rootMult
+    *(1+0.6*r.arts.zhen)
+    *(1+0.25*r.arts.dongfu)
+    *(1+0.1*G.meta.linggen)
+    *(1+0.1*r.sense)
+    *(r.plant?1.15:1)
+    *(r.relics.zhuli?1.25:1);
+  if(r.buffQi>0) q*=2;
+  return q;
+}
+function xiuPerSec(){
+  const r=G.run; if(!r) return 0;
+  let x=qiPerSec()*0.5*(1+0.08*G.meta.wuxing)*REALM_XIU[r.realm]*(r.stele?1.15:1);
+  if(r.buffXiu>0) x*=2;
+  return x;
+}
+function power(){
+  const r=G.run; if(!r) return 0;
+  let p=(15+8*r.arts.yujian+4*r.arts.jingang)*REALM_POW[r.realm];
+  p*=(r.relics.qingfeng?1.3:1)*(r.swordBoon?1.5:1);
+  if(r.buffPower>0) p*=1.25;
+  if(r.injured>0) p*=0.6;
+  if(r.shicuo>0) p*=0.85;
+  return Math.floor(p);
+}
+function needXiu(){
+  const r=G.run; if(!r) return 0;
+  const re=REALMS[r.realm];
+  return Math.round(re.base*Math.pow(1.45,r.layer));
+}
+function realmName(){
+  const r=G.run; if(!r) return '';
+  const re=REALMS[r.realm];
+  return re.layers>1 ? re.n+CN[r.layer]+'层' : re.n;
+}
+function jieLi(){
+  const r=G.run; if(!r) return 0;
+  // v1.8: 劫力 = 固定基数25 × 目标境界战力系数 × 抗劫系数（与当前战力解耦，战力投入直接提升成功率）
+  const target=Math.min(r.realm+1, 9);
+  let m=2.1*(r.realm===0?0.45:1)
+    *(1-0.04*G.meta.jieyun)
+    *(r.relics.xuangui?0.8:1)
+    *(r.guiBoon?0.8:1)
+    *(r.tianleiReady?0.65:1)
+    *(r.curse?1.3:1);
+  if(r.realm>=8) m*=1.9; // 终极天劫（v2.6 终局微调）
+  return Math.max(1, Math.round(25*REALM_POW[target]*m));
+}
+function jieRate(){
+  const p=power(), j=jieLi();
+  return clamp(p/(p+j*0.35), 0.05, 0.95);
+}
+
+/* ---------- 经济助手 ---------- */
+function gainStone(n){
+  const r=G.run; if(!r) return 0;
+  const g=Math.round(n*(r.relics.qiankun?1.5:1));
+  r.lingshi+=g; return g;
+}
+function spendStone(n){ if(G.run.lingshi<n) return false; G.run.lingshi-=n; return true; }
+function gainXiu(n){ const r=G.run; if(!r) return; r.xiuwei+=n; r.totalXiu+=n; }
+function addLife(m){ const r=G.run; if(!r) return; r.lifespan+=m; r.lifespanMax+=m; }
+function loseLife(m){ const r=G.run; if(!r) return; r.lifespan-=m; }
+function givePill(k){ G.run.pills[k]++; }
+function pillPrice(k){
+  const r=G.run; if(!r) return 0;
+  return Math.max(1, Math.round(PILLS[k].base*(1+0.8*r.realm)*(1-0.08*r.arts.danlu)));
+}
+function giveRandomRelic(){
+  const r=G.run; if(!r) return '';
+  const roll=Math.random();
+  if(roll<0.3&&!r.relics.qingfeng){ r.relics.qingfeng=true; return '青锋剑'; }
+  if(roll<0.55&&!r.relics.zhuli){ r.relics.zhuli=true; return '聚灵珠'; }
+  if(roll<0.75&&!r.relics.xuangui){ r.relics.xuangui=true; return '玄龟甲'; }
+  if(roll<0.95||r.relics.tifu<2){ r.relics.tifu++; return '替死符'; }
+  r.relics.qiankun=true; return '乾坤袋';
+}
+
+/* ---------- 动作 ---------- */
+let lastClick = 0;
+function meditate(){
+  const r=G.run; if(!r) return null;
+  const now=Date.now();
+  if(now-lastClick<220) return null;
+  lastClick=now;
+  const cm=1+0.5*r.arts.xinfa;
+  const s=gainStone(Math.round(6*cm*(1+0.3*r.realm)));
+  const x=Math.round(30*r.rootMult*cm);
+  gainXiu(x);
+  return { stone:s, xiu:x };
+}
+function artCost(key){ const a=ARTS[key], lv=G.run.arts[key]; return Math.round(a.base*Math.pow(a.mul,lv)); }
+function buyArt(key){
+  const r=G.run; if(!r) return;
+  const a=ARTS[key];
+  if(r.arts[key]>=a.max) return;
+  const c=artCost(key);
+  if(!spendStone(c)) return;
+  r.arts[key]++;
+  hooks.onLog('『'+a.n+'』升至 '+r.arts[key]+' 级。','gain');
+  save();
+}
+function metaCost(key){ const m=META[key], lv=G.meta[key]; return Math.round(m.base*Math.pow(m.mul,lv)); }
+function buyMeta(key){
+  const m=META[key];
+  if(G.meta[key]>=m.max) return;
+  const c=metaCost(key);
+  if(G.meta.dao<c) return;
+  G.meta.dao-=c; G.meta[key]++;
+  save();
+}
+function usePill(k){
+  const r=G.run; if(!r) return;
+  const p=PILLS[k];
+  if(r.pills[k]<1) return;
+  if(k==='huichun'&&r.injured<=0){ hooks.onLog('你并未受伤。','sys'); return; }
+  if(k==='tianlei'&&r.tianleiReady){ hooks.onLog('天雷淬体丹已在体内化开。','sys'); return; }
+  r.pills[k]--;
+  if(k==='juqi'){ r.buffQi=90; hooks.onLog('服下聚气丹，灵气翻涌（90 秒）。','gain'); }
+  if(k==='zengshou'){ addLife(180); hooks.onLog('服下增寿丹，寿元 +15 年。','gain'); }
+  if(k==='wudao'){ r.buffXiu=90; hooks.onLog('服下悟道丹，道心通明（90 秒）。','gain'); }
+  if(k==='huichun'){ r.injured=0; hooks.onLog('服下回春丹，伤势尽愈。','gain'); }
+  if(k==='tianlei'){ r.tianleiReady=true; hooks.onLog('天雷淬体丹化开，雷劫将至时威力大减。','gain'); }
+  hooks.onPill(k);
+  save();
+}
+
+function doBreak(){
+  const r=G.run; if(!r) return;
+  if(r.xiuwei<needXiu()) return;
+  const re=REALMS[r.realm];
+  if(r.layer>=re.layers-1){
+    r.tribOpen=true;
+    hooks.onTribOpen({ target:REALMS[r.realm+1].n, rate:jieRate(), jieLi:jieLi(), power:power() });
+  } else {
+    r.xiuwei-=needXiu(); r.layer++; r.stats.layers++;
+    hooks.onLog('闭关数载，突破至 '+realmName()+'！','trib');
+    save();
+  }
+}
+function tribulate(){
+  const r=G.run; if(!r) return;
+  r.tribOpen=false;
+  r.tianleiReady=false;
+  const rate=jieRate();
+  const target=REALMS[r.realm+1];
+  if(Math.random()<rate){
+    const need=needXiu();
+    r.xiuwei-=need; r.realm++; r.layer=0; r.stats.layers++;
+    // v2.3: 寿元奖励随境界递增；渡劫境（最后冲刺）额外加码 +38 年
+    const lifeBonus = (r.realm >= 8 ? 32 : 8 + r.realm * 3) * 12;
+    addLife(lifeBonus); r.sense=Math.min(1.5, r.sense+0.1);
+    const s=gainStone(100*(1+0.6*r.realm));
+    hooks.onLog('天雷淬体，成功突破至【'+target.n+'】！寿元 +'+(r.realm >= 8 ? 32 : 8 + r.realm * 3)+' 年，感悟渐深（灵气 +10%），灵石 ×'+s+'。','trib');
+    hooks.onTrib({ kind:'success', rate:rate, realm:r.realm });
+    hooks.onRealm(r.realm);
+    if(r.realm>=9){ endRun(true, '渡过九重天劫，霞光万道，飞升成仙！'); return; }
+  } else {
+    if(r.relics.tifu>0){
+      r.relics.tifu--;
+      r.injured=20;
+      hooks.onLog('渡'+target.n+'天劫失败！替死符碎裂，捡回一命，重伤（战力 -40%，20 秒）。','loss');
+      hooks.onTrib({ kind:'talisman', rate:rate, realm:r.realm });
+    } else if(r.realm===0||rate>=0.45){
+      // 筑基首劫为教学关；其余境界成功率≥45% 失败重伤
+      if(r.realm>=8){
+        // v2.5: 终极天劫失败 = 兵解（终局感；可用替死符保命一次）
+        endRun(false, '渡【'+target.n+'】终极天劫失败，身死道消于九重雷海……');
+        return;
+      }
+      r.injured=20;
+      hooks.onLog('渡'+target.n+'天劫失败，重伤垂死（战力 -40%，20 秒）。','loss');
+      hooks.onTrib({ kind:'injured', rate:rate, realm:r.realm });
+    } else {
+      endRun(false, '渡【'+target.n+'】天劫失败，兵解于雷海之中……');
+      return;
+    }
+  }
+  save();
+}
+
+/* ---------- 奇遇 & 妖兽 ---------- */
+function rollEvent(){
+  const r=G.run; if(!r||r.pendingEvent) return;
+  const f=G.meta.fuyuan;
+  const roll=Math.random();
+  let tier='n';
+  if(roll<0.05+f*0.02) tier='l';
+  else if(roll<0.22+f*0.03) tier='r';
+  let pool=EVENTS.filter(e=>e.tier===tier&&!r.lastEvents.includes(e.id));
+  if(!pool.length) pool=EVENTS.filter(e=>e.tier===tier);
+  const ev=pick(pool);
+  r.pendingEvent=ev;
+  r.lastEvents.push(ev.id);
+  if(r.lastEvents.length>3) r.lastEvents.shift();
+  hooks.onLog('【奇遇】'+ev.title+'——'+ev.desc,'event');
+  hooks.onEvent(ev);
+}
+function chooseEvent(i){
+  const r=G.run; if(!r||!r.pendingEvent) return;
+  const c=r.pendingEvent.choices[i];
+  if(!c||!c.need()) return;
+  r.pendingEvent=null;
+  r.stats.events++;
+  c.fn();
+  save();
+}
+function dismissEvent(){
+  if(!G.run) return;
+  G.run.pendingEvent=null;
+  hooks.onLog('机缘已逝，不再强求。','sys');
+}
+function beastFight(){
+  const r=G.run; if(!r) return;
+  const p=power();
+  const bp=Math.round(p*0.85*rnd(0.85,1.15));
+  const name=pick(BEASTS);
+  if(p>=bp){
+    r.stats.kills++;
+    const s=gainStone(60+50*r.realm);
+    hooks.onLog('斩杀『'+name+'』，得灵石 ×'+s+'。','battle');
+    let drop=null;
+    const d=Math.random();
+    if(d<0.12){ const pk=pick(['juqi','huichun','zengshou']); givePill(pk); drop=PILLS[pk].n; hooks.onLog('妖丹中竟藏着一枚'+drop+'！','gain'); }
+    else if(d<0.17){ const rel=giveRandomRelic(); drop=rel; hooks.onLog('妖兽巢穴中寻得『'+rel+'』！','gain'); }
+    hooks.onBeast({ win:true, name:name, stones:s, drop:drop });
+  } else {
+    loseLife(6); r.shicuo=30;
+    hooks.onLog('不敌『'+name+'』，负伤遁走，寿元 -0.5 年，士气受挫（战力 -15%，30 秒）。','loss');
+    hooks.onBeast({ win:false, name:name, stones:0, drop:null });
+  }
+}
+/* 妖兽预警：来袭前给出选择窗口，杜绝无决策随机惩罚 */
+function beastWarn(){
+  const r=G.run; if(!r||r.beastWarn) return;
+  r.beastWarn={ name:pick(BEASTS), ttl:8 };
+  hooks.onLog('【警示】妖气逼近：'+r.beastWarn.name+' 即将来袭（8 秒内决定迎战或避战）！','battle');
+  hooks.onBeastWarn(r.beastWarn);
+}
+function beastRespond(mode){
+  const r=G.run; if(!r||!r.beastWarn) return;
+  r.beastWarn=null;
+  if(mode==='fight'){
+    beastFight();
+  } else {
+    hooks.onLog('敛息避战，妖兽逡巡片刻后离去。','sys');
+  }
+  save();
+}
+
+/* ---------- 轮回 ---------- */
+function daoGain(){
+  const r=G.run; if(!r) return 0;
+  let d=r.realm*25+r.stats.layers*2+r.stats.events*6+r.stats.kills*2+(r.lifespan/12)*0.08;
+  if(r.won) d*=3;
+  return Math.max(1, Math.round(d));
+}
+function endRun(won, reason){
+  const r=G.run; if(!r) return;
+  r.won=won;
+  const d=daoGain();
+  G.meta.dao+=d;
+  r.dao=d;
+  hooks.onLog('==='+(won?'飞升成仙':'兵解轮回')+'：'+reason+'，道果 +'+d+' ===','dao');
+  G.run=null;
+  save();
+  hooks.onDeath({ won:won, reason:reason, dao:d, realm:r.realm, stats:r.stats, lifespan:r.lifespan });
+}
+function applyBoon(b, r){
+  switch(b.id){
+    case 'linggen': r.rootMult=2; break;
+    case 'jianjue': r.swordBoon=true; break;
+    case 'tifu': r.relics.tifu++; break;
+    case 'lingshi': r.lingshi+=200; break;
+    case 'yaohulu': r.pills.juqi++; r.pills.wudao++; break;
+    case 'xuangui': r.relics.xuangui=true; break;
+  }
+}
+function newRunObject(){
+  return {
+    rootMult:1, swordBoon:false, guiBoon:false,
+    realm:0, layer:0,
+    xiuwei:0, totalXiu:0,
+    lingshi:G.meta.jiadi*100,
+    lifespan:(70+G.meta.shouyuan*5)*12, lifespanMax:(70+G.meta.shouyuan*5)*12,
+    month:0,
+    sense:0, plant:false, stele:false, curse:false, tianleiReady:false, tribOpen:false,
+    beastWarn:null,
+    buffQi:0, buffXiu:0, buffPower:0, injured:0, shicuo:0,
+    arts:{ zhen:0, dongfu:0, yujian:0, jingang:0, xinfa:0, danlu:0 },
+    relics:{ qingfeng:false, xuangui:false, zhuli:false, qiankun:false, tifu:0 },
+    pills:{ juqi:G.meta.chuanjia, zengshou:0, wudao:0, huichun:0, tianlei:0 },
+    stats:{ events:0, kills:0, layers:0 },
+    pendingEvent:null, lastEvents:[], nextEventIn:8, nextBeastIn:25,
+    won:false, dao:0
+  };
+}
+function openBoonChoices(){
+  const pool=[...BOONS];
+  const three=[];
+  while(pool.length&&three.length<3) three.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
+  return three;
+}
+function pickBoon(boon){
+  const r=newRunObject();
+  if(boon) applyBoon(boon, r);
+  G.meta.runs++;
+  G.run=r;
+  hooks.onLog('=== 第 '+G.meta.runs+' 世轮回开启：山村少年，偶得修行法门 ===','sys');
+  hooks.onStart(r);
+  save();
+}
+function resetAll(){
+  storeDel(SAVE_KEY);
+  G={ v:1, meta:defaultMeta(), run:null };
+}
+
+/* ---------- 主循环 ---------- */
+function tick(dt){
+  const r=G.run; if(!r) return;
+  r.month+=dt;
+  if(r.buffQi>0) r.buffQi=Math.max(0,r.buffQi-dt);
+  if(r.buffXiu>0) r.buffXiu=Math.max(0,r.buffXiu-dt);
+  if(r.buffPower>0) r.buffPower=Math.max(0,r.buffPower-dt);
+  if(r.injured>0) r.injured=Math.max(0,r.injured-dt);
+  if(r.shicuo>0) r.shicuo=Math.max(0,r.shicuo-dt);
+  const xr=xiuPerSec()*dt;
+  r.xiuwei+=xr; r.totalXiu+=xr;
+  r.nextEventIn-=dt;
+  if(r.nextEventIn<=0&&!r.pendingEvent){ rollEvent(); r.nextEventIn=25+Math.random()*15; }
+  r.nextBeastIn-=dt;
+  if(r.nextBeastIn<=0&&!r.beastWarn){ beastWarn(); r.nextBeastIn=40+Math.random()*25; }
+  if(r.beastWarn){ r.beastWarn.ttl-=dt; if(r.beastWarn.ttl<=0){ r.beastWarn=null; hooks.onLog('妖兽徘徊许久，自行离去。','sys'); } }
+  r.lifespan-=dt;
+  if(r.lifespan<=0){ r.lifespan=0; endRun(false, '寿元耗尽，兵解于深山道观……'); }
+}
+
+/* ---------- 离线收益 ---------- */
+(function offline(){
+  try{
+    const t=storeGet(SAVE_KEY+'-t');
+    const now=Date.now();
+    if(t&&G.run){
+      const off=Math.min((now-(+t))/1000, 14400);
+      if(off>60){
+        const gain=xiuPerSec()*off*0.3;
+        G.run.xiuwei+=gain; G.run.totalXiu+=gain;
+        hooks.onLog('闭关归来：离线 '+Math.round(off/60)+' 分钟，修为 +'+fmt(gain)+'。','dao');
+      }
+    }
+    storeSet(SAVE_KEY+'-t', String(now));
+  }catch(e){}
+})();
+
+const __core = {
+  G, get run(){ return G.run; }, set run(v){ G.run=v; },
+  hooks, save, load, defaultMeta, SAVE_KEY,
+  qiPerSec, xiuPerSec, power, needXiu, jieLi, jieRate, realmName,
+  meditate, artCost, buyArt, metaCost, buyMeta, usePill, doBreak, tribulate,
+  rollEvent, chooseEvent, dismissEvent, beastFight, beastWarn, beastRespond,
+  daoGain, endRun, openBoonChoices, pickBoon, resetAll, tick,
+  BOONS, EVENTS, REALMS, ARTS, PILLS, META, RELIC_DEFS
+};
+/* ====CORE-END==== */
+
+/* =====================================================================
+ * 渲染层：three.js 场景 + 小人模型 + 特效 + HUD
+ * ===================================================================== */
+const IS_TEST = typeof window === 'undefined';
+if (!IS_TEST) {
+(function () {
+'use strict';
+
+/* ---------- 基础 ---------- */
+const sceneWrap = document.getElementById('sceneWrap');
+const fxText = document.getElementById('fxText');
+const darken = document.getElementById('darken');
+const flashDiv = document.getElementById('flash');
+
+let renderer, scene, camera, clock;
+let player = null;      // {group, parts}
+let beast = null;       // 妖兽动画状态
+let lightnings = [];    // 闪电列表
+let shakeT = 0;         // 镜头震动
+let deathAnim = null;   // 死亡动画
+let winAnim = null;     // 飞升动画
+let tribDark = 0;       // 天劫乌云压顶 (0..1)
+let tribDarkTarget = 0;
+let lastRealm = -1;
+const orbit = { az: 0.7, pol: 1.12, dist: 7.5, target: new THREE.Vector3(0, 1.5, 0) };
+
+function init3D() {
+  if (!window.THREE) { document.getElementById('noWebgl').style.display = 'flex'; return false; }
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+  } catch (e) { document.getElementById('noWebgl').style.display = 'flex'; return false; }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  sceneWrap.appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0c1020);
+  scene.fog = new THREE.Fog(0x0c1020, 26, 85);
+
+  camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 300);
+  clock = new THREE.Clock();
+
+  buildLights();
+  buildWorld();
+  player = buildCultivator();
+  scene.add(player.group);
+
+  initControls();
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+  return true;
+}
+
+/* ---------- 灯光 ---------- */
+function buildLights() {
+  const hemi = new THREE.HemisphereLight(0x445577, 0x0a0c12, 0.55);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffd9a0, 1.15);
+  sun.position.set(14, 20, 10);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.left = -16; sun.shadow.camera.right = 16;
+  sun.shadow.camera.top = 16; sun.shadow.camera.bottom = -16;
+  sun.shadow.camera.far = 60;
+  scene.add(sun);
+  const warm = new THREE.PointLight(0xe8c15a, 0.55, 12);
+  warm.position.set(0, 3, 0);
+  scene.add(warm);
+  playerGlow = warm;
+}
+let playerGlow = null;
+
+/* ---------- 场景 ---------- */
+function buildWorld() {
+  // 地面
+  const ground = new THREE.Mesh(
+    new THREE.CircleGeometry(70, 48),
+    new THREE.MeshPhongMaterial({ color: 0x131824 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // 悟道台
+  const plat = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.3, 2.6, 0.34, 32),
+    new THREE.MeshPhongMaterial({ color: 0x2a3044, shininess: 30 })
+  );
+  plat.position.y = 0.17; plat.castShadow = true; plat.receiveShadow = true;
+  scene.add(plat);
+  const platRing = new THREE.Mesh(
+    new THREE.TorusGeometry(2.45, 0.06, 8, 48),
+    new THREE.MeshPhongMaterial({ color: 0x8a7a3a, emissive: 0x55441a, transparent: true, opacity: 0.9 })
+  );
+  platRing.rotation.x = Math.PI / 2; platRing.position.y = 0.36;
+  scene.add(platRing);
+  const rune = new THREE.Mesh(
+    new THREE.RingGeometry(0.7, 0.85, 6),
+    new THREE.MeshBasicMaterial({ color: 0x3a4a6a, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+  );
+  rune.rotation.x = -Math.PI / 2; rune.position.y = 0.36;
+  scene.add(rune);
+
+  // 群山
+  const mtMat = [0x141c2e, 0x1a2236, 0x111a2a];
+  for (let i = 0; i < 12; i++) {
+    const r = 30 + Math.random() * 26;
+    const a = Math.random() * Math.PI * 2;
+    const h = 6 + Math.random() * 10;
+    const m = new THREE.Mesh(
+      new THREE.ConeGeometry(3 + Math.random() * 5, h, 7),
+      new THREE.MeshPhongMaterial({ color: pick(mtMat), flatShading: true })
+    );
+    m.position.set(Math.cos(a) * r, h / 2 - 0.3, Math.sin(a) * r);
+    scene.add(m);
+    if (Math.random() < 0.5) {
+      const s = new THREE.Mesh(new THREE.ConeGeometry(1.6 + Math.random() * 2, h * 0.6, 6),
+        new THREE.MeshPhongMaterial({ color: pick(mtMat), flatShading: true }));
+      s.position.set(Math.cos(a + 0.3) * (r + 4), h * 0.3 - 0.2, Math.sin(a + 0.3) * (r + 4));
+      scene.add(s);
+    }
+  }
+
+  // 树
+  for (let i = 0; i < 16; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = 7 + Math.random() * 20;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.16, 1.1, 6),
+      new THREE.MeshPhongMaterial({ color: 0x3a2a1c }));
+    trunk.position.set(x, 0.55, z);
+    const f1 = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.1, 7),
+      new THREE.MeshPhongMaterial({ color: 0x1e4a35, flatShading: true }));
+    f1.position.set(x, 1.5, z);
+    const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.9, 7),
+      new THREE.MeshPhongMaterial({ color: 0x2a6a45, flatShading: true }));
+    f2.position.set(x, 2.3, z);
+    scene.add(trunk); scene.add(f1); scene.add(f2);
+  }
+
+  // v2.8-A7: 远景宫殿剪影（雾中若隐若现，提升"仙"境层次）
+  const palace = new THREE.Group();
+  const palMat = new THREE.MeshPhongMaterial({ color: 0x1a2438, flatShading: true, transparent: true, opacity: 0.55 });
+  for (let i = 0; i < 3; i++) {
+    const w = 2.2 + Math.random() * 1.6, h = 2.5 + Math.random() * 2.2, d = 1.6 + Math.random() * 1.2;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), palMat);
+    body.position.y = h / 2;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(w * 0.85, h * 0.45, 4), palMat);
+    roof.position.y = h + h * 0.2; roof.rotation.y = Math.PI / 4;
+    const g2 = new THREE.Group();
+    g2.add(body); g2.add(roof);
+    g2.position.set((i - 1) * 4.2 + Math.random(), 0, -38 - Math.random() * 6);
+    palace.add(g2);
+  }
+  scene.add(palace);
+
+  // v2.8-A7: 山间雾带（低速横向漂移的扁平云层）
+  for (let i = 0; i < 5; i++) {
+    const g3 = new THREE.Group();
+    const fogMat = new THREE.MeshPhongMaterial({ color: 0x8899bb, transparent: true, opacity: 0.14, flatShading: true });
+    for (let j = 0; j < 4; j++) {
+      const s2 = new THREE.Mesh(new THREE.SphereGeometry(2.2 + Math.random() * 1.6, 7, 7), fogMat);
+      s2.position.set(j * 3.4, Math.random() * 0.3, 0);
+      s2.scale.y = 0.28;
+      g3.add(s2);
+    }
+    g3.position.set(rnd(-30, 30), rnd(0.8, 2.2), rnd(-24, -12));
+    g3.userData.speed = 0.5 + Math.random() * 0.6;
+    scene.add(g3);
+    fogBands.push(g3);
+  }
+
+  // v2.8-A7: 萤火（低空暖黄小点，缓慢飘移）
+  const fireflyGeo = new THREE.BufferGeometry();
+  const ffPos = new Float32Array(40 * 3);
+  for (let i = 0; i < 40; i++) {
+    ffPos[i * 3] = rnd(-9, 9);
+    ffPos[i * 3 + 1] = rnd(0.4, 3.2);
+    ffPos[i * 3 + 2] = rnd(-9, 9);
+  }
+  fireflyGeo.setAttribute('position', new THREE.BufferAttribute(ffPos, 3));
+  const fireflies = new THREE.Points(fireflyGeo, new THREE.PointsMaterial({
+    color: 0xffd98a, size: 0.04, transparent: true, opacity: 0.5,
+    blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true
+  }));
+  fireflies.userData.vel = Array.from({ length: 40 }, () => rnd(-0.15, 0.15));
+  scene.add(fireflies);
+  fireflyPts = fireflies;
+
+  // 月亮
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(5.5, 24, 24),
+    new THREE.MeshBasicMaterial({ color: 0xe8e4d0 }));
+  moon.position.set(-70, 58, -120);
+  scene.add(moon);
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(8.5, 20, 20),
+    new THREE.MeshBasicMaterial({ color: 0xaac8e8, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
+  glow.position.copy(moon.position);
+  scene.add(glow);
+
+  // 云
+  for (let i = 0; i < 7; i++) {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshPhongMaterial({ color: 0x8899bb, transparent: true, opacity: 0.28, flatShading: true });
+    for (let j = 0; j < 3 + Math.floor(Math.random() * 3); j++) {
+      const s = new THREE.Mesh(new THREE.SphereGeometry(0.8 + Math.random() * 0.9, 8, 8), mat);
+      s.position.set(j * 0.9, Math.random() * 0.35, Math.random() * 0.5);
+      s.scale.y = 0.45;
+      g.add(s);
+    }
+    const a = Math.random() * Math.PI * 2;
+    g.position.set(Math.cos(a) * (18 + Math.random() * 30), 11 + Math.random() * 7, Math.sin(a) * (18 + Math.random() * 30));
+    g.userData.speed = 0.25 + Math.random() * 0.3;
+    scene.add(g);
+    clouds.push(g);
+  }
+
+  // 星星
+  const starGeo = new THREE.BufferGeometry();
+  const starPos = new Float32Array(350 * 3);
+  for (let i = 0; i < 350; i++) {
+    const a = Math.random() * Math.PI * 2, e = 0.05 + Math.random() * 1.2, r = 90 + Math.random() * 50;
+    starPos[i * 3] = Math.cos(a) * Math.cos(e) * r;
+    starPos[i * 3 + 1] = Math.sin(e) * r + 5;
+    starPos[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r;
+  }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({
+    color: 0xffffff, size: 0.35, transparent: true, opacity: 0.75, sizeAttenuation: true
+  })));
+
+  // 灵气粒子
+  qiPoints = makeQiPoints();
+  scene.add(qiPoints);
+
+  // 花瓣
+  for (let i = 0; i < 34; i++) {
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16),
+      new THREE.MeshBasicMaterial({ color: 0xd8a0b8, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+    p.position.set(rnd(-9, 9), rnd(2, 10), rnd(-9, 9));
+    p.userData = { vy: rnd(-0.5, -0.15), vx: rnd(-0.2, 0.2), vz: rnd(-0.15, 0.15), rot: rnd(0, 6) };
+    scene.add(p);
+    petals.push(p);
+  }
+}
+const clouds = [], petals = [];
+let qiPoints = null;
+const fogBands = [];
+let fireflyPts = null;
+
+function makeQiPoints() {
+  const n = 260;
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(n * 3);
+  const vel = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 4.2;
+    pos[i * 3] = Math.cos(a) * r;
+    pos[i * 3 + 1] = Math.random() * 3.6;
+    pos[i * 3 + 2] = Math.sin(a) * r;
+    vel[i] = 0.12 + Math.random() * 0.2;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({
+    // v2.8: 场景金降饱和（0xe8c15a → 0xc8b878 暖灰金），玩家本体保持高纯金（奖励色分层）
+    color: 0xc8b878, size: 0.055, transparent: true, opacity: 0.6,
+    blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true
+  }));
+  pts.userData.vel = vel;
+  return pts;
+}
+function updateQiPoints(dt) {
+  if (!qiPoints) return;
+  const pos = qiPoints.geometry.attributes.position.array;
+  const vel = qiPoints.userData.vel;
+  for (let i = 0; i < pos.length / 3; i++) {
+    pos[i * 3 + 1] += vel[i] * dt;
+    if (pos[i * 3 + 1] > 3.8) pos[i * 3 + 1] = 0;
+  }
+  qiPoints.geometry.attributes.position.needsUpdate = true;
+  qiPoints.rotation.y += dt * 0.05;
+}
+
+/* ---------- 小人模型 ---------- */
+const REALM_LOOK = [
+  { robe: 0x8a8578, belt: 0x6b665a, rim: 0x9a958a, extra: 0 },  // 练气 灰布衣
+  { robe: 0x3f8a72, belt: 0x2f6b5a, rim: 0x58c9a3, extra: 0 },  // 筑基 青衫
+  { robe: 0xa8862f, belt: 0xd8b84a, rim: 0xf0d070, extra: 1 },  // 金丹 金袍+光环
+  { robe: 0x6a4f9f, belt: 0x8a6fbf, rim: 0xc9a6f0, extra: 2 },  // 元婴 紫袍+元婴虚影
+  { robe: 0x8f4a3f, belt: 0x6f2f2f, rim: 0xf0a070, extra: 3 },  // 化神 赤袍+披风
+  { robe: 0x3f6f9f, belt: 0x8fc8e8, rim: 0x7adce8, extra: 4 },  // 炼虚 蓝袍+2飞剑
+  { robe: 0x9aa0b8, belt: 0xd8d8e8, rim: 0xe8ecf8, extra: 5 },  // 合体 银白+4飞剑
+  { robe: 0xd8c98a, belt: 0xffe08a, rim: 0xffd98a, extra: 6 },  // 大乘 金白+6飞剑
+  { robe: 0x4a3f6f, belt: 0x8a7fcf, rim: 0xb48ce8, extra: 7 },  // 渡劫 暗紫+雷光
+  { robe: 0xffe08a, belt: 0xfff0c0, rim: 0xffffff, extra: 8 }   // 飞升 金
+];
+const SKIN = 0xe8c0a0, HAIR = 0x241c16, BLADE = 0xd8dce8, GOLD = 0xe8c15a;
+
+function mat(color, opts) {
+  return new THREE.MeshPhongMaterial(Object.assign({ color: color, shininess: 20 }, opts || {}));
+}
+
+function buildSwordMesh() {
+  const g = new THREE.Group();
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.62, 0.012), mat(BLADE, { shininess: 80 }));
+  blade.position.y = 0.34;
+  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.02, 0.03), mat(GOLD));
+  guard.position.y = 0.04;
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.14, 0.03), mat(0x4a3a28));
+  handle.position.y = -0.06;
+  g.add(blade); g.add(guard); g.add(handle);
+  return g;
+}
+
+function buildCultivator() {
+  const group = new THREE.Group();
+  const P = {};
+  const robeMat = mat(REALM_LOOK[0].robe);
+  const beltMat = mat(REALM_LOOK[0].belt);
+
+  // 腿
+  P.legL = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.52, 10), mat(0x3a3028));
+  P.legL.position.set(-0.09, 0.26, 0);
+  P.legR = P.legL.clone(); P.legR.position.x = 0.09;
+  group.add(P.legL); group.add(P.legR);
+
+  // 道袍（身体）
+  P.robe = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.38, 0.85, 12), robeMat);
+  P.robe.position.y = 0.95; P.robe.castShadow = true;
+  group.add(P.robe);
+
+  // 袖袍 + 手
+  P.sleeveL = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.52, 10), robeMat);
+  P.sleeveL.position.set(-0.32, 1.08, 0); P.sleeveL.rotation.z = 0.95; P.sleeveL.rotation.x = -0.35;
+  P.sleeveR = P.sleeveL.clone(); P.sleeveR.position.x = 0.32; P.sleeveR.rotation.z = -0.95; P.sleeveR.rotation.x = 0.35;
+  P.handL = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 8), mat(SKIN));
+  P.handL.position.set(-0.5, 0.82, 0.02);
+  P.handR = P.handL.clone(); P.handR.position.x = 0.5;
+  group.add(P.sleeveL); group.add(P.sleeveR); group.add(P.handL); group.add(P.handR);
+
+  // 腰带
+  P.belt = new THREE.Mesh(new THREE.CylinderGeometry(0.335, 0.335, 0.08, 14), beltMat);
+  P.belt.position.y = 0.66;
+  P.tassel = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.2, 6), mat(0xd8b84a));
+  P.tassel.position.set(0.1, 0.5, 0.26);
+  group.add(P.belt); group.add(P.tassel);
+
+  // 头
+  P.head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 16, 16), mat(SKIN));
+  P.head.position.y = 1.63;
+  P.eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 6), mat(0x1a1a24));
+  P.eyeL.position.set(-0.07, 1.66, 0.185);
+  P.eyeR = P.eyeL.clone(); P.eyeR.position.x = 0.07;
+  P.bun = new THREE.Mesh(new THREE.SphereGeometry(0.095, 10, 10), mat(HAIR));
+  P.bun.position.y = 1.86;
+  P.hairpin = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.3, 6), mat(GOLD));
+  P.hairpin.position.set(0, 1.9, 0.05); P.hairpin.rotation.x = 0.9;
+  group.add(P.head); group.add(P.eyeL); group.add(P.eyeR); group.add(P.bun); group.add(P.hairpin);
+
+  // 背后剑
+  P.backSword = buildSwordMesh();
+  P.backSword.position.set(0.14, 1.32, -0.24);
+  P.backSword.rotation.set(0.55, 0, -0.25);
+  group.add(P.backSword);
+
+  // 光环
+  P.halo = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.018, 8, 28), mat(0xf0d070, { emissive: 0x8a6a10, transparent: true, opacity: 0.9 }));
+  P.halo.rotation.x = Math.PI / 2; P.halo.position.y = 1.98;
+  P.halo.visible = false;
+  group.add(P.halo);
+
+  // 元婴虚影
+  P.baby = new THREE.Group();
+  const babyCore = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 10), mat(0xe8d8ff, { emissive: 0x6a4f9f, transparent: true, opacity: 0.9 }));
+  const babyGlow = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0xc9a6f0, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
+  P.baby.add(babyCore); P.baby.add(babyGlow);
+  P.baby.position.y = 2.28; P.baby.visible = false;
+  group.add(P.baby);
+
+  // 披风
+  P.cape = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.15),
+    new THREE.MeshPhongMaterial({ color: 0x6f2f2f, side: THREE.DoubleSide, transparent: true, opacity: 0.92 }));
+  P.cape.position.set(0, 1.05, -0.26);
+  P.cape.visible = false;
+  group.add(P.cape);
+
+  // 脚下光环（境界色）
+  P.aura = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.025, 8, 40),
+    new THREE.MeshBasicMaterial({ color: REALM_LOOK[0].rim, transparent: true, opacity: 0.65, blending: THREE.AdditiveBlending, depthWrite: false }));
+  P.aura.rotation.x = Math.PI / 2; P.aura.position.y = 0.06;
+  group.add(P.aura);
+
+  // 环绕飞剑
+  P.orbit = new THREE.Group();
+  for (let i = 0; i < 6; i++) {
+    const sw = buildSwordMesh();
+    sw.scale.setScalar(0.8);
+    sw.userData.angle = (i / 6) * Math.PI * 2;
+    sw.userData.radius = 0.95 + (i % 2) * 0.18;
+    sw.visible = false;
+    P.orbit.add(sw);
+  }
+  P.orbit.position.y = 1.45;
+  group.add(P.orbit);
+
+  // 渡劫暗雷光
+  P.darkAura = new THREE.Mesh(new THREE.SphereGeometry(0.85, 14, 14),
+    new THREE.MeshBasicMaterial({ color: 0x6a3faf, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  P.darkAura.position.y = 1.1;
+  group.add(P.darkAura);
+
+  // 飞升光柱
+  P.pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 9, 12, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  P.pillar.position.y = 4.5;
+  group.add(P.pillar);
+
+  group.position.y = 0;
+  return { group: group, parts: P };
+}
+
+function applyRealmLook(idx) {
+  if (!player) return;
+  const P = player.parts, L = REALM_LOOK[idx] || REALM_LOOK[9];
+  P.robe.material.color.setHex(L.robe);
+  P.belt.material.color.setHex(L.belt);
+  P.aura.material.color.setHex(L.rim);
+  P.hairpin.material.color.setHex(idx >= 1 ? GOLD : 0x6b665a);
+  P.halo.visible = idx >= 2;
+  P.baby.visible = idx >= 3;
+  P.cape.visible = idx >= 4;
+  P.cape.material.color.setHex(idx >= 4 ? 0x8f3a3a : 0x6f2f2f);
+  const nSword = idx >= 7 ? 6 : idx >= 6 ? 4 : idx >= 5 ? 2 : 0;
+  P.orbit.children.forEach((sw, i) => { sw.visible = i < nSword; });
+  P.darkAura.material.opacity = idx === 8 ? 0.28 : 0;
+  if (playerGlow) playerGlow.color.setHex(L.rim);
+  lastRealm = idx;
+  if (idx >= 1) fx('突破至' + REALMS[idx].n + '！');
+}
+
+/* ---------- 妖兽模型 ---------- */
+function buildBeastMesh(color) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.4, 10, 10), mat(color, { flatShading: true }));
+  body.scale.set(1, 0.85, 1.5); body.position.y = 0.62;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 9, 9), mat(color, { flatShading: true }));
+  head.position.set(0, 0.95, 0.55);
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.2), mat(0x2a2a34));
+  snout.position.set(0, 0.88, 0.75);
+  const eyeM = new THREE.MeshPhongMaterial({ color: 0xff3030, emissive: 0xaa0000 });
+  const el = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), eyeM);
+  el.position.set(-0.09, 1.0, 0.68);
+  const er = el.clone(); er.position.x = 0.09;
+  const hornL = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 6), mat(0xd8d0c0));
+  hornL.position.set(-0.1, 1.2, 0.5); hornL.rotation.z = 0.3;
+  const hornR = hornL.clone(); hornR.position.x = 0.1; hornR.rotation.z = -0.3;
+  const legs = [];
+  for (const [x, z] of [[-0.22, 0.35], [0.22, 0.35], [-0.2, -0.4], [0.2, -0.4]]) {
+    const l = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.45, 6), mat(0x2a2a34));
+    l.position.set(x, 0.24, z);
+    legs.push(l);
+  }
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.4, 6), mat(color, { flatShading: true }));
+  tail.position.set(0, 0.75, -0.62); tail.rotation.x = 0.9;
+  g.add(body, head, snout, el, er, hornL, hornR, tail, ...legs);
+  return g;
+}
+
+/* ---------- 特效 ---------- */
+function fx(text) {
+  fxText.textContent = text;
+  fxText.classList.remove('show');
+  void fxText.offsetWidth;
+  fxText.classList.add('show');
+}
+function ringPulse(color) {
+  if (!player) return;
+  const r = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.03, 8, 40),
+    new THREE.MeshBasicMaterial({ color: color || 0xe8c15a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  r.rotation.x = Math.PI / 2; r.position.y = 0.3;
+  scene.add(r);
+  ringFX.push({ m: r, t: 0 });
+}
+const ringFX = [];
+function sparkle(color, n) {
+  if (!player) return;
+  const cnt = n || 14;
+  for (let i = 0; i < cnt; i++) {
+    const s = new THREE.Mesh(new THREE.SphereGeometry(0.035, 5, 5),
+      new THREE.MeshBasicMaterial({ color: color || 0xe8c15a, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
+    s.position.set(player.group.position.x + rnd(-0.3, 0.3), rnd(0.8, 2.2), rnd(-0.3, 0.3));
+    const v = new THREE.Vector3(rnd(-1.2, 1.2), rnd(1.5, 3.2), rnd(-1.2, 1.2));
+    scene.add(s);
+    sparks.push({ m: s, v: v, t: 0 });
+  }
+}
+const sparks = [];
+function lightningStrike() {
+  if (!player) return;
+  const pts = [];
+  const x0 = rnd(-0.6, 0.6), z0 = rnd(-0.6, 0.6);
+  const seg = 8;
+  for (let i = 0; i <= seg; i++) {
+    const t = i / seg;
+    const j = (Math.random() - 0.5) * 1.1 * (1 - t * 0.4);
+    pts.push(new THREE.Vector3(x0 + j * (1 - t * 0.5), 9 - t * 7.6, z0 + j * 0.8));
+  }
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xc8dcff, transparent: true, opacity: 1 }));
+  scene.add(line);
+  lightnings.push({ m: line, ttl: 0.32 });
+  const bolt = new THREE.PointLight(0xaaccff, 2.5, 16);
+  bolt.position.set(x0, 4, z0);
+  scene.add(bolt);
+  lightnings.push({ m: bolt, ttl: 0.2 });
+  flashDiv.style.transition = 'none'; flashDiv.style.opacity = 0.35;
+  setTimeout(() => { flashDiv.style.transition = 'opacity .35s'; flashDiv.style.opacity = 0; }, 60);
+  shakeT = Math.max(shakeT, 0.45);
+  beep(180, 0.25, 'sawtooth', 0.08);
+}
+let _actx = null;
+function beep(freq, dur, type, vol) {
+  try {
+    _actx = _actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (_actx.state === 'suspended') _actx.resume();
+    const o = _actx.createOscillator(), g = _actx.createGain();
+    o.type = type || 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol || 0.05, _actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, _actx.currentTime + dur);
+    o.connect(g); g.connect(_actx.destination);
+    o.start(); o.stop(_actx.currentTime + dur);
+  } catch (e) {}
+}
+
+/* ---------- 视角控制 ---------- */
+function initControls() {
+  const el = renderer.domElement;
+  let dragging = false, px = 0, py = 0;
+  const pointers = new Map();
+  let pinchDist = 0;
+
+  el.addEventListener('pointerdown', e => {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) { dragging = true; px = e.clientX; py = e.clientY; }
+    else if (pointers.size === 2) {
+      dragging = false;
+      const [a, b] = [...pointers.values()];
+      pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+    }
+  });
+  el.addEventListener('pointermove', e => {
+    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinchDist > 0) orbit.dist = clamp(orbit.dist * (pinchDist / d), 3.5, 15);
+      pinchDist = d;
+      return;
+    }
+    if (!dragging) return;
+    const dx = e.clientX - px, dy = e.clientY - py;
+    px = e.clientX; py = e.clientY;
+    orbit.az -= dx * 0.0055;
+    orbit.pol = clamp(orbit.pol - dy * 0.004, 0.35, 1.45);
+  });
+  const end = e => { pointers.delete(e.pointerId); dragging = pointers.size === 1; pinchDist = 0; };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+  el.addEventListener('wheel', e => {
+    e.preventDefault();
+    orbit.dist = clamp(orbit.dist * (1 + e.deltaY * 0.001), 3.5, 15);
+  }, { passive: false });
+  // 触摸拖拽时防止页面滚动
+  el.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+}
+function updateCamera(dt) {
+  const s = Math.sin(orbit.pol), c = Math.cos(orbit.pol);
+  const sh = shakeT > 0 ? rnd(-0.08, 0.08) * shakeT * 2 : 0;
+  camera.position.set(
+    orbit.target.x + s * Math.cos(orbit.az) * orbit.dist + sh,
+    orbit.target.y + c * orbit.dist,
+    orbit.target.z + s * Math.sin(orbit.az) * orbit.dist
+  );
+  camera.lookAt(orbit.target);
+  if (shakeT > 0) shakeT = Math.max(0, shakeT - dt);
+}
+
+/* ---------- 动画更新 ---------- */
+function updateAnims(dt, t) {
+  // 云
+  for (const c of clouds) {
+    c.position.x += c.userData.speed * dt;
+    if (c.position.x > 55) c.position.x = -55;
+  }
+  updateQiPoints(dt);
+  // 花瓣
+  for (const p of petals) {
+    p.position.x += p.userData.vx * dt;
+    p.position.y += p.userData.vy * dt;
+    p.position.z += p.userData.vz * dt;
+    p.rotation.z += p.userData.rot * dt;
+    if (p.position.y < 0.2) { p.position.y = rnd(6, 10); p.position.x = rnd(-9, 9); p.position.z = rnd(-9, 9); }
+  }
+  // 人物
+  if (player && G.run && !deathAnim) {
+    const g = player.group;
+    g.position.y = Math.sin(t * 1.15) * 0.045;
+    g.rotation.y = Math.sin(t * 0.4) * 0.06;
+    // v2.8-A6: 呼吸感（轻微缩放）与衣袂摆动
+    g.scale.setScalar(1 + Math.sin(t * 1.3) * 0.012);
+    const P = player.parts;
+    P.sleeveL.rotation.z = 0.95 + Math.sin(t * 1.6) * 0.05;
+    P.sleeveR.rotation.z = -0.95 - Math.sin(t * 1.6 + 0.5) * 0.05;
+    P.aura.material.opacity = 0.45 + Math.sin(t * 2.2) * 0.25;
+    P.aura.rotation.z += dt * 0.6;
+    P.halo.rotation.z += dt * 0.8;
+    P.halo.position.y = 1.98 + Math.sin(t * 1.6) * 0.03;
+    P.baby.position.y = 2.28 + Math.sin(t * 1.3) * 0.08;
+    P.baby.rotation.y += dt * 0.9;
+    P.cape.rotation.x = Math.sin(t * 0.9) * 0.06;
+    P.cape.rotation.z = Math.sin(t * 0.7) * 0.04;
+    P.orbit.rotation.y += dt * 0.85;
+    P.orbit.position.y = 1.45 + Math.sin(t * 1.2) * 0.05;
+    P.backSword.rotation.z = -0.25 + Math.sin(t * 0.8) * 0.03;
+    P.darkAura.material.opacity = (lastRealm === 8 ? 0.28 : 0) + (tribDark * 0.15);
+    P.darkAura.scale.setScalar(1 + Math.sin(t * 3) * 0.06);
+    // 天劫乌云压顶
+    if (G.run.tribOpen) tribDarkTarget = 1; else tribDarkTarget = 0;
+    tribDark += (tribDarkTarget - tribDark) * Math.min(1, dt * 2);
+    darken.style.opacity = tribDark * 0.75;
+  }
+  // v2.8-A7: 雾带漂移
+  for (const f of fogBands) {
+    f.position.x += f.userData.speed * dt;
+    if (f.position.x > 34) f.position.x = -34;
+  }
+  // v2.8-A7: 萤火飘移
+  if (fireflyPts) {
+    const p = fireflyPts.geometry.attributes.position.array;
+    const v = fireflyPts.userData.vel;
+    for (let i = 0; i < p.length / 3; i++) {
+      p[i * 3] += v[i] * dt + Math.sin(t * 0.8 + i) * 0.004;
+      p[i * 3 + 1] += Math.sin(t * 0.6 + i * 1.7) * 0.006;
+      if (p[i * 3] > 10) p[i * 3] = -10;
+      if (p[i * 3] < -10) p[i * 3] = 10;
+    }
+    fireflyPts.geometry.attributes.position.needsUpdate = true;
+  }
+  // 光环扩散
+  for (let i = ringFX.length - 1; i >= 0; i--) {
+    const f = ringFX[i];
+    f.t += dt;
+    f.m.scale.setScalar(1 + f.t * 2.4);
+    f.m.material.opacity = 0.9 * (1 - f.t / 0.8);
+    if (f.t > 0.8) { scene.remove(f.m); ringFX.splice(i, 1); }
+  }
+  // 火花
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i];
+    s.t += dt;
+    s.m.position.addScaledVector(s.v, dt);
+    s.m.material.opacity = 0.95 * (1 - s.t / 0.9);
+    if (s.t > 0.9) { scene.remove(s.m); sparks.splice(i, 1); }
+  }
+  // 闪电
+  for (let i = lightnings.length - 1; i >= 0; i--) {
+    const l = lightnings[i];
+    l.ttl -= dt;
+    if (l.ttl <= 0) { scene.remove(l.m); lightnings.splice(i, 1); }
+  }
+  // 妖兽
+  updateBeast(dt);
+  // 死亡动画
+  if (deathAnim) {
+    deathAnim.t += dt;
+    const g = player.group;
+    g.rotation.x += dt * 2.6;
+    g.position.y = Math.max(-1.2, g.position.y - dt * 0.8);
+    darken.style.opacity = Math.min(0.85, deathAnim.t * 0.6);
+    if (deathAnim.t > 1.5 && !deathAnim.shown) {
+      deathAnim.shown = true;
+      showEndModal(deathAnim.data);
+    }
+  }
+  // 飞升动画
+  if (winAnim) {
+    winAnim.t += dt;
+    const g = player.group;
+    g.position.y += dt * 1.6;
+    g.rotation.y += dt * 0.8;
+    player.parts.pillar.material.opacity = Math.min(0.55, winAnim.t * 0.35);
+    if (winAnim.t > 2.6 && !winAnim.shown) {
+      winAnim.shown = true;
+      showEndModal(winAnim.data);
+    }
+  }
+  // 飞升光柱常驻（胜利前隐藏）
+  if (player && !winAnim) player.parts.pillar.material.opacity = 0;
+}
+function updateBeast(dt) {
+  if (!beast) return;
+  const b = beast;
+  if (b.phase === 'stand') {
+    // 预警阶段：远处踱步
+    b.m.position.x = Math.sin(performance.now() / 500) * 0.4;
+    b.m.rotation.y = Math.PI + Math.sin(performance.now() / 700) * 0.15;
+    if (!G.run || !G.run.beastWarn) { b.phase = 'flee'; b.t = 0; }
+  } else if (b.phase === 'run') {
+    b.m.position.z += dt * 4.6;
+    b.m.position.x = Math.sin(b.m.position.z * 0.5) * 0.55;
+    b.m.position.y = Math.abs(Math.sin(b.m.position.z * 1.4)) * 0.12;
+    b.m.rotation.y = Math.PI + Math.sin(b.m.position.z * 0.5) * 0.2;
+    if (b.m.position.z >= -2.4) { b.phase = 'lunge'; b.t = 0; }
+  } else if (b.phase === 'lunge') {
+    b.t += dt;
+    const k = Math.min(1, b.t / 0.32);
+    b.m.position.z = -2.4 + k * 1.1;
+    b.m.position.y = Math.abs(Math.sin(k * Math.PI)) * 0.85;
+    b.m.rotation.x = -k * 0.5;
+    if (b.t >= 0.32) {
+      clashFlash();
+      b.phase = b.res.win ? 'dissolve' : 'flee';
+      b.t = 0;
+    }
+  } else if (b.phase === 'dissolve') {
+    b.t += dt;
+    b.m.scale.setScalar(Math.max(0.001, 1 - b.t / 0.55));
+    if (b.t >= 0.55) { scene.remove(b.m); beast = null; }
+  } else if (b.phase === 'flee') {
+    b.t += dt;
+    b.m.position.z -= dt * 9;
+    if (b.t >= 1.0) { scene.remove(b.m); beast = null; }
+  }
+}
+function clashFlash() {
+  flashDiv.style.transition = 'none'; flashDiv.style.opacity = 0.22;
+  setTimeout(() => { flashDiv.style.transition = 'opacity .3s'; flashDiv.style.opacity = 0; }, 50);
+  shakeT = Math.max(shakeT, 0.3);
+  beep(120, 0.15, 'square', 0.06);
+}
+
+/* ---------- HUD ---------- */
+const $ = id => document.getElementById(id);
+let activeTab = 'arts';
+function addLog(msg, cls) {
+  const box = $('log');
+  const div = document.createElement('div');
+  div.className = 'log-item l-' + (cls || 'sys');
+  div.textContent = msg;
+  box.prepend(div);
+  while (box.children.length > 60) box.lastChild.remove();
+}
+function renderHUD() {
+  const r = G.run;
+  $('statDao').textContent = fmt(G.meta.dao);
+  if (!r) {
+    $('realmBadge').textContent = '——'; $('realmBadge').className = 'realm-chip';
+    $('statPower').textContent = '0'; $('statStone').textContent = '0';
+    $('statDate').textContent = '轮回之外';
+    $('lifeFill').style.width = '0%'; $('lifeText').textContent = '——';
+    $('qiRate').textContent = '0'; $('xiuRate').textContent = '0';
+    $('xiuFill').style.width = '0%'; $('xiuText').textContent = '0 / 0';
+    $('btnBreak').disabled = true; $('btnBreak').textContent = '突破';
+    $('tribPanel').style.display = 'none';
+    return;
+  }
+  $('realmBadge').textContent = realmName();
+  $('realmBadge').className = 'realm-chip r' + r.realm;
+  $('statPower').textContent = fmt(power());
+  $('statStone').textContent = fmt(r.lingshi);
+  const y = Math.floor(r.month / 12) + 1;
+  $('statDate').textContent = GZ[(y - 1) % 60] + '年 ' + MOONS[r.month % 12] + '（第' + y + '年）';
+  const lifePct = clamp(r.lifespan / r.lifespanMax * 100, 0, 100);
+  const lf = $('lifeFill');
+  lf.style.width = lifePct + '%';
+  lf.className = lifePct < 25 ? 'warn' : '';
+  $('lifeText').textContent = (r.lifespan / 12).toFixed(1) + ' / ' + (r.lifespanMax / 12).toFixed(0) + ' 年';
+  $('qiRate').textContent = fmt(qiPerSec());
+  $('xiuRate').textContent = fmt(xiuPerSec());
+  const cm = 1 + 0.5 * r.arts.xinfa;
+  $('clickStone').textContent = fmt(3 * cm * (1 + 0.3 * r.realm) * (r.relics.qiankun ? 1.5 : 1));
+  $('clickXiu').textContent = fmt(25 * r.rootMult * cm);
+  const need = needXiu();
+  $('xiuFill').style.width = clamp(r.xiuwei / need * 100, 0, 100) + '%';
+  $('xiuText').textContent = fmt(r.xiuwei) + ' / ' + fmt(need);
+  const re = REALMS[r.realm];
+  const isMajor = r.layer >= re.layers - 1;
+  const canBreak = r.xiuwei >= need;
+  const btn = $('btnBreak');
+  btn.disabled = !canBreak;
+  btn.textContent = isMajor ? (r.realm >= 8 ? '渡劫飞升 ⚡' : '渡劫突破 ⚡') : '突破 · 冲击' + (re.layers > 1 ? CN[r.layer + 1] + '层' : '');
+  btn.classList.toggle('btn-pulse', canBreak && !r.tribOpen);
+  const panel = $('tribPanel');
+  // 妖兽预警条倒计时
+  const bwBar = $('beastWarnBar');
+  if (r.beastWarn) {
+    bwBar.classList.add('show');
+    $('bwName').textContent = r.beastWarn.name;
+    $('bwFill').style.width = (r.beastWarn.ttl / 8 * 100) + '%';
+  } else {
+    bwBar.classList.remove('show');
+  }
+  if (!r.tribOpen) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  const target = REALMS[r.realm + 1];
+  const rate = Math.round(jieRate() * 100);
+  // v2.7: 风险标签分级 + 建议战力门槛（对抗性审查 #3/#4）
+  const isTutorial = r.realm === 0;
+  const isFinal = r.realm >= 8;
+  const jl = jieLi();
+  const safePower = Math.ceil(jl * 0.35);        // 达到重伤保护线所需战力
+  const solidPower = Math.ceil(jl * 0.35 * 1.5); // 稳妥（≈64%）战力
+  const riskTag = isTutorial
+    ? '<span class="chip on-jade">教学劫：失败不会陨落</span>'
+    : (isFinal
+      ? '<span class="chip on-red">终极天劫：失败即身死道消</span>'
+      : '<span class="chip on-gold">警告：成功率过低时失败将兵解</span>');
+  $('tribStats').innerHTML =
+    '目标：<b>' + target.n + '</b>' + (isFinal ? '（终极天劫）' : '') + '　' + riskTag +
+    '<br>劫力：<b>' + fmt(jl) + '</b>　当前战力：<b>' + fmt(power()) + '</b>' +
+    '<br>渡劫成功率：<span class="rate">' + rate + '%</span>' +
+    '<br>建议战力：≥<b>' + fmt(safePower) + '</b>（稳妥 ' + fmt(solidPower) + '，每级御剑诀约 +4~6%）' +
+    (r.tianleiReady ? '<br><span style="color:#7adce8">天雷淬体丹已生效（劫力 -35%）</span>' : '') +
+    (r.curse ? '<br><span style="color:#e88a82">遗蜕诅咒缠身（劫力 +30%）</span>' : '') +
+    '<br><span style="color:#8a8578;font-size:11px">失败：替死符免死一次；成功率 ≥45%（筑基首劫无论成败）重伤存活，否则兵解</span>';
+}
+function renderTabs() {
+  const r = G.run;
+  const body = $('tabBody');
+  if (!r) { body.innerHTML = '<div class="hint">尚未入轮回。请先开启一世修行。</div>'; return; }
+  if (activeTab === 'arts') {
+    body.innerHTML = Object.keys(ARTS).map(k => {
+      const a = ARTS[k], lv = r.arts[k], maxed = lv >= a.max, c = artCost(k);
+      return '<div class="row"><div class="info"><div class="n">' + a.n + '</div><div class="d">' + a.d + '</div></div>' +
+        '<div class="lv">' + lv + '/' + a.max + '</div>' +
+        (maxed ? '<span class="chip on-gold">圆满</span>' :
+          '<div class="cost' + (r.lingshi < c ? ' no' : '') + '">' + fmt(c) + '</div>' +
+          '<button class="btn btn-small" data-a="buy:' + k + '" ' + (r.lingshi < c ? 'disabled' : '') + '>升级</button>') +
+        '</div>';
+    }).join('') +
+    '<div class="hint">此世印记：突破感悟 +' + Math.round(r.sense * 100) + '% 灵气' +
+      (r.plant ? '｜灵药园 +15% 灵气' : '') + (r.stele ? '｜残碑 +15% 修为转化' : '') +
+      (r.curse ? '｜<span style="color:#e88a82">遗蜕诅咒</span>' : '') + '<br>灵石来自吐纳、斩妖与奇遇，优先投资聚灵阵与洞府。</div>';
+  } else if (activeTab === 'pills') {
+    body.innerHTML = Object.keys(PILLS).map(k => {
+      const p = PILLS[k], c = pillPrice(k), stock = r.pills[k];
+      let extra = '';
+      if (k === 'tianlei' && r.tianleiReady) extra = ' <span class="chip on-jade">已服</span>';
+      if (k === 'huichun' && r.injured <= 0) extra = ' <span class="chip">未受伤</span>';
+      return '<div class="row"><div class="info"><div class="n">' + p.n + ' ×' + stock + '</div><div class="d">' + p.d + '</div></div>' +
+        '<div class="cost' + (r.lingshi < c ? ' no' : '') + '">' + fmt(c) + '</div>' +
+        '<button class="btn btn-small" data-a="pill:' + k + '" ' + (r.lingshi < c || stock < 1 || (k === 'huichun' && r.injured <= 0) || (k === 'tianlei' && r.tianleiReady) ? 'disabled' : '') + '>服用</button>' + extra +
+        '</div>';
+    }).join('') + statusChips(r);
+  } else if (activeTab === 'relics') {
+    body.innerHTML = Object.keys(RELIC_DEFS).map(k => {
+      const rd = RELIC_DEFS[k];
+      const owned = k === 'tifu' ? r.relics.tifu : r.relics[k];
+      return '<div class="row"><div class="info"><div class="n">' + rd.n + (k === 'tifu' ? ' ×' + r.relics.tifu : '') + '</div><div class="d">' + rd.d + '</div></div>' +
+        (owned ? '<span class="chip on-gold">已得</span>' : '<span class="chip">未得</span>') + '</div>';
+    }).join('') + '<div class="hint">法宝可通过奇遇、斩妖、商人或渡劫获得。替死符在渡劫失败时消耗并免死一次。</div>';
+  }
+}
+function statusChips(r) {
+  const chips = [];
+  if (r.buffQi > 0) chips.push('<span class="chip on-gold">聚气 · ' + Math.ceil(r.buffQi) + 's</span>');
+  if (r.buffXiu > 0) chips.push('<span class="chip on-gold">悟道 · ' + Math.ceil(r.buffXiu) + 's</span>');
+  if (r.buffPower > 0) chips.push('<span class="chip on-jade">战意 · ' + Math.ceil(r.buffPower) + 's</span>');
+  if (r.injured > 0) chips.push('<span class="chip on-red">重伤 · ' + Math.ceil(r.injured) + 's</span>');
+  if (r.shicuo > 0) chips.push('<span class="chip on-red">挫败 · ' + Math.ceil(r.shicuo) + 's</span>');
+  return chips.length ? '<div class="status-chips">' + chips.join('') + '</div>' : '';
+}
+
+/* ---------- Modal ---------- */
+function renderEventModal() {
+  const r = G.run;
+  if (!r || !r.pendingEvent) { $('evtOverlay').classList.add('hidden'); return; }
+  const ev = r.pendingEvent;
+  $('evtModal').innerHTML = '<div class="evt-title">' + ev.title + '</div><div class="evt-desc">' + ev.desc + '</div>' +
+    ev.choices.map((c, i) => '<button class="evt-choice" data-a="evt:' + i + '" ' + (c.need() ? '' : 'disabled') + '>' + c.label() + '</button>').join('') +
+    '<button class="evt-dismiss" data-a="evt:dismiss">缘起缘灭，就此作罢</button>';
+  $('evtOverlay').classList.remove('hidden');
+}
+function showEndModal(data) {
+  const m = $('endModal');
+  lastEndData = data;
+  const isWin = data && data.won;
+  const title = !data ? '轮回殿 · 初入仙途' : (isWin ? '飞升成仙' : '兵解轮回');
+  const sub = !data ? '每一世修为与道果，都沉淀于此。' : (data.reason || '');
+  const metaRows = Object.keys(META).map(k => {
+    const mm = META[k], lv = G.meta[k], maxed = lv >= mm.max, c = metaCost(k);
+    return '<div class="meta-row"><div class="info"><div class="n">' + mm.n + ' <span style="color:var(--muted);font-size:10.5px">' + lv + '/' + mm.max + '</span></div><div class="d">' + mm.d + '</div></div>' +
+      (maxed ? '<span class="chip on-gold">圆满</span>' :
+        '<div class="cost' + (G.meta.dao < c ? ' no' : '') + '">' + fmt(c) + '</div>' +
+        '<button class="btn btn-small" data-a="meta:' + k + '" ' + (G.meta.dao < c ? 'disabled' : '') + '>强化</button>') + '</div>';
+  }).join('');
+  const statsHtml = data ? '<div class="m-stats">' +
+    '<div class="m-stat"><div class="k">抵达境界</div><div class="v">' + (data.realm < REALMS.length ? REALMS[data.realm].n : '—') + '</div></div>' +
+    '<div class="m-stat"><div class="k">道果获得</div><div class="v j">+' + data.dao + '</div></div>' +
+    '<div class="m-stat"><div class="k">奇遇</div><div class="v">' + (data.stats ? data.stats.events : 0) + '</div></div>' +
+    '<div class="m-stat"><div class="k">斩妖</div><div class="v">' + (data.stats ? data.stats.kills : 0) + '</div></div>' +
+    '</div>' : '';
+  m.innerHTML =
+    '<div class="m-title' + (isWin ? ' win' : '') + '">' + title + '</div>' +
+    '<div class="m-sub">' + sub + '</div>' +
+    statsHtml +
+    '<div class="dao-big">道果 <b>' + fmt(G.meta.dao) + '</b></div>' +
+    '<div class="divider"></div>' +
+    '<div class="m-sub" style="margin-bottom:6px">轮回殿 · 永久强化</div>' +
+    metaRows +
+    '<div class="divider"></div>' +
+    '<div class="center"><button class="btn btn-primary m-btn" id="btnNewRun">入轮回</button></div>' +
+    '<div class="center" style="margin-top:9px"><button class="btn btn-small btn-danger" data-a="reset">抹去记忆，重开仙途</button></div>';
+  $('btnNewRun').onclick = openBoonSelect;
+  $('endOverlay').classList.remove('hidden');
+}
+let lastEndData = null;
+function openBoonSelect() {
+  const three = __core.openBoonChoices();
+  $('boonModal').innerHTML = '<div class="m-title">初始机缘</div><div class="m-sub">轮回伊始，天道赐你三样机缘，择一而取</div>' +
+    '<div class="boon-grid">' + three.map((b, i) =>
+      '<button class="boon" data-a="boon:' + i + '"><div class="bn">' + b.n + '</div><div class="bd">' + b.d + '</div></button>').join('') + '</div>';
+  $('boonOverlay').dataset.boons = JSON.stringify(three.map(b => b.id));
+  $('boonOverlay').classList.remove('hidden');
+}
+function pickBoonUI(i) {
+  const ids = JSON.parse($('boonOverlay').dataset.boons || '[]');
+  const b = __core.BOONS.find(x => x.id === ids[i]);
+  __core.pickBoon(b);
+  $('endOverlay').classList.add('hidden');
+  $('boonOverlay').classList.add('hidden');
+  // 重置 3D 状态
+  deathAnim = null; winAnim = null;
+  player.group.rotation.set(0, 0, 0);
+  player.group.position.set(0, 0, 0);
+  darken.style.opacity = 0;
+  applyRealmLook(0);
+  fx('入轮回');
+}
+
+/* ---------- 钩子接线 ---------- */
+function wireHooks() {
+  __core.hooks.onLog = addLog;
+  __core.hooks.onEvent = () => { renderEventModal(); sparkle(0x6ec8e0, 10); };
+  __core.hooks.onBeastWarn = w => {
+    const bar = $('beastWarnBar');
+    $('bwName').textContent = w.name;
+    bar.classList.add('show');
+    // 远处出现妖兽（站立踱步）
+    if (!beast) {
+      const colors = [0x2f3a4a, 0x4a2f2f, 0x2f4a3a, 0x4a3f2f, 0x3a2f4a];
+      beast = { m: buildBeastMesh(pick(colors)), res: { win: false }, phase: 'stand', t: 0 };
+      beast.m.position.set(0, 0, -13);
+      scene.add(beast.m);
+    }
+  };
+  __core.hooks.onBeast = res => {
+    if (beast && beast.phase === 'stand') { beast.res = res; beast.phase = 'run'; beast.t = 0; }
+    else if (!beast) {
+      const colors = [0x2f3a4a, 0x4a2f2f, 0x2f4a3a, 0x4a3f2f, 0x3a2f4a];
+      beast = { m: buildBeastMesh(pick(colors)), res: res, phase: 'run', t: 0 };
+      beast.m.position.set(3, 0, -14);
+      scene.add(beast.m);
+    }
+  };
+  __core.hooks.onTribOpen = d => { tribDarkTarget = 1; darken.style.opacity = 0.75; beep(90, 0.6, 'sawtooth', 0.06); };
+  __core.hooks.onTrib = d => {
+    if (d.kind === 'success') { lightningStrike(); setTimeout(() => lightningStrike(), 180); }
+    else { lightningStrike(); }
+  };
+  __core.hooks.onRealm = idx => {
+    applyRealmLook(idx);
+    ringPulse(REALM_LOOK[idx].rim);
+    sparkle(REALM_LOOK[idx].rim, 20);
+    beep(440 + idx * 60, 0.3, 'sine', 0.06);
+  };
+  __core.hooks.onPill = k => { sparkle(k === 'huichun' ? 0x7fe0b4 : 0x9fd4e4, 8); };
+  __core.hooks.onStart = () => { applyRealmLook(0); };
+  __core.hooks.onDeath = data => {
+    $('evtOverlay').classList.add('hidden');
+    if (data.won) {
+      winAnim = { t: 0, shown: false, data: data };
+      beep(660, 0.5, 'sine', 0.07);
+      setTimeout(() => beep(880, 0.7, 'sine', 0.07), 260);
+    } else {
+      deathAnim = { t: 0, shown: false, data: data };
+      beep(140, 0.5, 'sawtooth', 0.06);
+    }
+  };
+}
+
+/* ---------- 事件委托 & 按钮 ---------- */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-a]');
+  if (!el) return;
+  const a = el.dataset.a;
+  if (a.startsWith('tab:')) {
+    activeTab = a.slice(4);
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.a === a));
+    renderTabs();
+  } else if (a.startsWith('buy:')) __core.buyArt(a.slice(4));
+  else if (a.startsWith('pill:')) __core.usePill(a.slice(5));
+  else if (a.startsWith('meta:')) { __core.buyMeta(a.slice(5)); showEndModal(lastEndData); }
+  else if (a.startsWith('evt:')) {
+    const i = a.slice(4);
+    if (i === 'dismiss') { __core.dismissEvent(); }
+    else { __core.chooseEvent(+i); }
+    $('evtOverlay').classList.add('hidden');
+  } else if (a.startsWith('beast:')) {
+    __core.beastRespond(a.slice(6));
+    $('beastWarnBar').classList.remove('show');
+    // 避战时让妖兽转身离去
+    if (a.slice(6) === 'avoid' && beast && beast.phase === 'stand') { beast.phase = 'flee'; beast.t = 0; }
+  } else if (a.startsWith('boon:')) pickBoonUI(+a.slice(5));
+  else if (a === 'reset') {
+    if (confirm('确定抹去所有道果与记忆，重开仙途？')) {
+      __core.resetAll();
+      location.reload();
+    }
+  }
+});
+$('btnMeditate').addEventListener('click', () => {
+  const got = __core.meditate();
+  if (!got) return;
+  const sp = document.createElement('span');
+  sp.className = 'ripple';
+  $('btnMeditate').appendChild(sp);
+  setTimeout(() => sp.remove(), 700);
+  ringPulse(0xe8c15a);
+  // 吐纳时人物微微跃起
+  if (player && !deathAnim && !winAnim) {
+    const g = player.group;
+    g.position.y += 0.06;
+    g.scale.setScalar(1.06);
+    setTimeout(() => { g.scale.setScalar(1); }, 150);
+  }
+});
+$('btnBreak').addEventListener('click', () => __core.doBreak());
+$('btnTrib').addEventListener('click', () => {
+  __core.tribulate();
+  $('tribPanel').style.display = 'none';
+});
+$('btnTribWait').addEventListener('click', () => {
+  if (!G.run) return;
+  G.run.tribOpen = false;
+  tribDarkTarget = 0;
+  addLog('暂不渡劫，继续积蓄实力。', 'sys');
+});
+$('btnGiveUp').addEventListener('click', () => {
+  const btn = $('btnGiveUp');
+  if (btn.dataset.arm !== '1') {
+    btn.dataset.arm = '1'; btn.textContent = '再点一次确认';
+    setTimeout(() => { btn.dataset.arm = ''; btn.textContent = '兵解'; }, 3000);
+    return;
+  }
+  btn.dataset.arm = ''; btn.textContent = '兵解';
+  __core.endRun(false, '主动兵解，遁入轮回');
+});
+$('btnHelp').addEventListener('click', () => $('helpOverlay').classList.remove('hidden'));
+$('btnHelpClose').addEventListener('click', () => $('helpOverlay').classList.add('hidden'));
+// v2.9: 反馈入口——带游戏状态预填的 GitHub Issues 直达链接（测试闭环）
+$('btnFeedback').addEventListener('click', () => {
+  const r = G.run;
+  const state = r ? ('境界:' + REALMS[r.realm].n + ' 寿元:' + (r.lifespan / 12).toFixed(0) + '年 战力:' + fmt(power()) + ' 灵石:' + fmt(r.lingshi)) : '未开局';
+  const url = 'https://github.com/ajiaxi666/xianxia-lunhui-test/issues/new?title=' +
+    encodeURIComponent('【反馈】' + (r ? REALMS[r.realm].n : '未开局')) +
+    '&body=' + encodeURIComponent('## 反馈类型\n- [ ] Bug\n- [ ] 玩法建议\n- [ ] 数值平衡\n- [ ] 美术/文案\n- [ ] 其他\n\n## 描述\n\n（请描述你遇到的问题或建议，越具体越好）\n\n---\n游戏状态：' + state + '\n版本：测试版 v2.8+');
+  window.open(url, '_blank');
+});
+$('btnToggleR').addEventListener('click', () => $('rightPanel').classList.toggle('collapsed'));
+
+/* ---------- 主循环 ---------- */
+let lastTs = Date.now();
+let gameSpeed = 1;
+function gameTick() {
+  const now = Date.now();
+  let dt = (now - lastTs) / 1000;
+  lastTs = now;
+  if (dt > 5) dt = 5;
+  __core.tick(dt * gameSpeed);
+  renderHUD();
+  renderTabs();
+}
+setInterval(gameTick, 200);
+setInterval(() => __core.save(), 8000);
+window.addEventListener('beforeunload', () => { __core.save(); try { localStorage.setItem(__core.SAVE_KEY + '-t', String(Date.now())); } catch (e) {} });
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  updateAnims(dt, t);
+  updateCamera(dt);
+  renderer.render(scene, camera);
+}
+
+/* ---------- 启动 ---------- */
+if (!init3D()) return;
+wireHooks();
+renderHUD();
+renderTabs();
+// v2.8: 演示/截图模式：?demo=1 自动开局，?realm=N 指定境界，?speed=N 时间流速
+const qp = new URLSearchParams(location.search);
+if (qp.get('demo')) {
+  if (!G.run) {
+    const three = __core.openBoonChoices();
+    __core.pickBoon(three[0]);
+  }
+  $('endOverlay').classList.add('hidden');
+  $('boonOverlay').classList.add('hidden');
+}
+const realmOverride = parseInt(qp.get('realm') || '-1', 10);
+if (realmOverride >= 0 && G.run) {
+  G.run.realm = Math.min(realmOverride, 9);
+  G.run.layer = 0;
+  G.run.xiuwei = 0;
+  applyRealmLook(G.run.realm);
+}
+// ?noevent=1: 屏蔽事件/妖兽干扰（截图与演示模式）
+if (qp.get('noevent') && G.run) {
+  G.run.nextEventIn = 99999;
+  G.run.nextBeastIn = 99999;
+}
+const speedP = parseFloat(qp.get('speed') || '1');
+if (speedP > 0 && speedP !== 1) gameSpeed = speedP;
+// 已有存档且在世 → 同步装扮
+if (G.run) {
+  applyRealmLook(Math.min(G.run.realm, 9));
+  addLog('道体复苏，续接前世修行。', 'sys');
+} else {
+  showEndModal(null);
+}
+animate();
+
+})();
+}
+</script>
+</body>
+</html>
