@@ -61,7 +61,10 @@
   @keyframes pulse{0%,100%{box-shadow:0 0 6px rgba(232,193,90,.25)}50%{box-shadow:0 0 20px rgba(232,193,90,.6)}}
 
   /* ---------- 面板 ---------- */
-  .panel{position:fixed;z-index:20;background:rgba(13,17,28,.82);border:1px solid var(--line);border-radius:14px;
+  .panel{position:fixed;z-index:20;background:
+    radial-gradient(120% 90% at 15% 0%, rgba(110,150,200,.08), transparent 55%),
+    radial-gradient(100% 80% at 95% 100%, rgba(190,150,90,.07), transparent 50%),
+    rgba(13,17,28,.84);border:1px solid var(--line);border-radius:14px;
     padding:12px;backdrop-filter:blur(8px);box-shadow:0 8px 40px rgba(0,0,0,.5)}
   #leftPanel{left:12px;bottom:12px;width:330px;max-width:calc(100vw - 24px);max-height:78vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
   #rightPanel{right:12px;top:64px;width:300px;max-width:calc(100vw - 24px);max-height:calc(100vh - 84px);overflow-y:auto}
@@ -101,6 +104,18 @@
   .log-item.l-trib{border-color:var(--purple);color:#c9a6f0}
   .log-item.l-dao{border-color:var(--jade);color:#9fe0c4}
   .log-item.l-sys{color:var(--muted)}
+  /* ---------- v2.11 非模态事件卡片（右下角堆叠，不打断挂机） ---------- */
+  #evtStack{position:fixed;right:14px;bottom:14px;z-index:45;display:flex;flex-direction:column;gap:8px;width:330px;max-width:calc(100vw - 28px);pointer-events:none}
+  .evt-card{pointer-events:auto;background:rgba(15,19,32,.94);border:1px solid rgba(110,200,224,.4);border-radius:12px;padding:12px 14px;box-shadow:0 10px 34px rgba(0,0,0,.55);backdrop-filter:blur(6px);animation:evtIn .3s ease-out}
+  @keyframes evtIn{from{transform:translateX(46px);opacity:0}to{transform:translateX(0);opacity:1}}
+  .evt-card .evt-title{font-family:"STKaiti","KaiTi",serif;font-size:15px;color:#9fd4e4;letter-spacing:2px;margin-bottom:4px}
+  .evt-card .evt-desc{font-size:12px;color:var(--txt);line-height:1.6;margin-bottom:8px}
+  .evt-card .evt-choices{display:flex;flex-direction:column;gap:5px}
+  .evt-card .evt-choice{width:100%;text-align:left;padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.03);color:var(--txt);font-size:12.5px;cursor:pointer;transition:all .15s;font-family:inherit}
+  .evt-card .evt-choice:hover:not(:disabled){border-color:var(--cyan);background:rgba(110,200,224,.12)}
+  .evt-card .evt-choice:disabled{opacity:.35;cursor:not-allowed}
+  .evt-card .evt-dismiss{display:block;margin:6px auto 0;background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit}
+  .evt-card .evt-dismiss:hover{color:var(--txt)}
   /* ---------- 妖兽预警条（v1.1） ---------- */
   #beastWarnBar{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:40;display:none;
     background:rgba(30,20,14,.92);border:1px solid rgba(232,160,90,.55);border-radius:10px;padding:8px 14px;
@@ -133,7 +148,10 @@
   /* ---------- Modal ---------- */
   .overlay{position:fixed;inset:0;z-index:60;background:rgba(4,5,9,.78);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:16px}
   .overlay.hidden{display:none}
-  .modal{width:min(540px,94vw);max-height:88vh;overflow-y:auto;background:rgba(18,22,36,.96);border:1px solid var(--line2);border-radius:16px;padding:20px;box-shadow:0 20px 70px rgba(0,0,0,.6)}
+  .modal{width:min(540px,94vw);max-height:88vh;overflow-y:auto;background:
+    radial-gradient(130% 100% at 20% 0%, rgba(110,150,200,.09), transparent 55%),
+    radial-gradient(110% 90% at 90% 100%, rgba(190,150,90,.08), transparent 50%),
+    rgba(18,22,36,.97);border:1px solid var(--line2);border-radius:16px;padding:20px;box-shadow:0 20px 70px rgba(0,0,0,.6)}
   .m-title{font-family:"STKaiti","KaiTi",serif;font-size:23px;color:var(--gold2);text-align:center;letter-spacing:6px;margin-bottom:6px;text-shadow:0 0 20px rgba(232,193,90,.35)}
   .m-title.win{color:#ffd98a;font-size:27px;text-shadow:0 0 30px rgba(255,215,0,.5)}
   .m-sub{text-align:center;color:var(--muted);font-size:12.5px;margin-bottom:14px}
@@ -252,7 +270,7 @@
 </div>
 <button class="btn btn-small panel-toggle" id="btnToggleR">☰ 商店</button>
 
-<div class="overlay hidden" id="evtOverlay"><div class="modal evt-modal" id="evtModal"></div></div>
+<div id="evtStack"></div>
 <div class="overlay" id="endOverlay"><div class="modal" id="endModal"></div></div>
 <div class="overlay hidden" id="boonOverlay"><div class="modal" id="boonModal"></div></div>
 <div class="overlay hidden" id="helpOverlay"><div class="modal">
@@ -483,14 +501,34 @@ function load(){
 let G = load();
 function save(){
   try{
-    if(G.run&&G.run.pendingEvent){
+    if(G.run&&G.run.events&&G.run.events.length){
       const copy=JSON.parse(JSON.stringify(G));
-      copy.run.pendingEvent={ id:G.run.pendingEvent.id };
+      copy.run.events=G.run.events.map(e=>({ id:e.id }));
       storeSet(SAVE_KEY, JSON.stringify(copy));
     } else {
       storeSet(SAVE_KEY, JSON.stringify(G));
     }
   }catch(e){}
+}
+function load(){
+  try{
+    const raw=storeGet(SAVE_KEY);
+    if(raw){
+      const d=JSON.parse(raw);
+      if(d&&d.meta){
+        // v2.11: 旧存档 pendingEvent 字段迁移到事件队列 events
+        if(d.run&&d.run.pendingEvent!==undefined){
+          d.run.events = d.run.pendingEvent ? [d.run.pendingEvent] : [];
+          delete d.run.pendingEvent;
+        }
+        if(d.run&&d.run.events){
+          d.run.events = d.run.events.map(e=>EVENTS.find(x=>x&&x.id===e.id)||null).filter(Boolean);
+        }
+        return d;
+      }
+    }
+  }catch(e){}
+  return { v:1, meta:defaultMeta(), run:null };
 }
 
 /* ---------- 派生数值 ---------- */
@@ -679,7 +717,7 @@ function tribulate(){
 
 /* ---------- 奇遇 & 妖兽 ---------- */
 function rollEvent(){
-  const r=G.run; if(!r||r.pendingEvent) return;
+  const r=G.run; if(!r) return;
   const f=G.meta.fuyuan;
   const roll=Math.random();
   let tier='n';
@@ -688,24 +726,35 @@ function rollEvent(){
   let pool=EVENTS.filter(e=>e.tier===tier&&!r.lastEvents.includes(e.id));
   if(!pool.length) pool=EVENTS.filter(e=>e.tier===tier);
   const ev=pick(pool);
-  r.pendingEvent=ev;
+  // v2.11: 事件队列（最多 3 个，不打断挂机）；满时自动作罢最老的
+  if(r.events.length>=3){
+    const dropped=r.events.shift();
+    hooks.onLog('【机缘】'+dropped.title+' 久候不至，自行消散……','event');
+  }
+  r.events.push(ev);
   r.lastEvents.push(ev.id);
   if(r.lastEvents.length>3) r.lastEvents.shift();
   hooks.onLog('【奇遇】'+ev.title+'——'+ev.desc,'event');
   hooks.onEvent(ev);
 }
-function chooseEvent(i){
-  const r=G.run; if(!r||!r.pendingEvent) return;
-  const c=r.pendingEvent.choices[i];
+function chooseEvent(a, b){
+  const r=G.run; if(!r||!r.events.length) return;
+  // 兼容单参调用（evIdx=0, choiceIdx=a）；双参为 (evIdx, choiceIdx)
+  const evIdx = (b===undefined) ? 0 : a;
+  const choiceIdx = (b===undefined) ? a : b;
+  const ev=r.events[evIdx];
+  if(!ev) return;
+  const c=ev.choices[choiceIdx];
   if(!c||!c.need()) return;
-  r.pendingEvent=null;
+  r.events.splice(evIdx,1);
   r.stats.events++;
   c.fn();
   save();
 }
-function dismissEvent(){
+function dismissEvent(evIdx){
   if(!G.run) return;
-  G.run.pendingEvent=null;
+  const idx = evIdx===undefined ? 0 : evIdx;
+  if(G.run.events[idx]) G.run.events.splice(idx,1);
   hooks.onLog('机缘已逝，不再强求。','sys');
 }
 function beastFight(){
@@ -789,7 +838,7 @@ function newRunObject(){
     relics:{ qingfeng:false, xuangui:false, zhuli:false, qiankun:false, tifu:0 },
     pills:{ juqi:G.meta.chuanjia, zengshou:0, wudao:0, huichun:0, tianlei:0 },
     stats:{ events:0, kills:0, layers:0 },
-    pendingEvent:null, lastEvents:[], nextEventIn:8, nextBeastIn:25,
+    events:[], lastEvents:[], nextEventIn:8, nextBeastIn:25,
     won:false, dao:0
   };
 }
@@ -825,7 +874,7 @@ function tick(dt){
   const xr=xiuPerSec()*dt;
   r.xiuwei+=xr; r.totalXiu+=xr;
   r.nextEventIn-=dt;
-  if(r.nextEventIn<=0&&!r.pendingEvent){ rollEvent(); r.nextEventIn=25+Math.random()*15; }
+  if(r.nextEventIn<=0){ rollEvent(); r.nextEventIn=25+Math.random()*15; }
   r.nextBeastIn-=dt;
   if(r.nextBeastIn<=0&&!r.beastWarn){ beastWarn(); r.nextBeastIn=40+Math.random()*25; }
   if(r.beastWarn){ r.beastWarn.ttl-=dt; if(r.beastWarn.ttl<=0){ r.beastWarn=null; hooks.onLog('妖兽徘徊许久，自行离去。','sys'); } }
@@ -941,6 +990,8 @@ let playerGlow = null;
 
 /* ---------- 场景 ---------- */
 function buildWorld() {
+  // v2.12: 天空渐变（顶部深蓝 → 暮紫 → 地平线暖橙）
+  scene.background = createSkyTexture();
   // 地面
   const ground = new THREE.Mesh(
     new THREE.CircleGeometry(70, 48),
@@ -963,12 +1014,31 @@ function buildWorld() {
   );
   platRing.rotation.x = Math.PI / 2; platRing.position.y = 0.36;
   scene.add(platRing);
+  // v2.12: 悟道台三层同心环（金/青石/暗边）+ 双阵纹
+  const ringJade = new THREE.Mesh(
+    new THREE.TorusGeometry(2.75, 0.09, 8, 48),
+    new THREE.MeshPhongMaterial({ color: 0x3a5a6a, emissive: 0x1a3a4a, transparent: true, opacity: 0.8 })
+  );
+  ringJade.rotation.x = Math.PI / 2; ringJade.position.y = 0.35;
+  scene.add(ringJade);
+  const ringDark = new THREE.Mesh(
+    new THREE.TorusGeometry(3.05, 0.05, 8, 48),
+    new THREE.MeshPhongMaterial({ color: 0x2a3244, transparent: true, opacity: 0.6 })
+  );
+  ringDark.rotation.x = Math.PI / 2; ringDark.position.y = 0.34;
+  scene.add(ringDark);
   const rune = new THREE.Mesh(
     new THREE.RingGeometry(0.7, 0.85, 6),
     new THREE.MeshBasicMaterial({ color: 0x3a4a6a, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
   );
   rune.rotation.x = -Math.PI / 2; rune.position.y = 0.36;
   scene.add(rune);
+  const rune2 = new THREE.Mesh(
+    new THREE.RingGeometry(1.15, 1.26, 8),
+    new THREE.MeshBasicMaterial({ color: 0x4a5a7a, transparent: true, opacity: 0.22, side: THREE.DoubleSide })
+  );
+  rune2.rotation.x = -Math.PI / 2; rune2.position.y = 0.36;
+  scene.add(rune2);
 
   // 群山
   const mtMat = [0x141c2e, 0x1a2236, 0x111a2a];
@@ -1167,6 +1237,23 @@ const SKIN = 0xe8c0a0, HAIR = 0x241c16, BLADE = 0xd8dce8, GOLD = 0xe8c15a;
 function mat(color, opts) {
   return new THREE.MeshPhongMaterial(Object.assign({ color: color, shininess: 20 }, opts || {}));
 }
+function createSkyTexture() {
+  const c = document.createElement('canvas');
+  c.width = 4; c.height = 256;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#0a0e1e');
+  grad.addColorStop(0.5, '#161636');
+  grad.addColorStop(0.78, '#332a44');
+  grad.addColorStop(0.92, '#4a3438');
+  grad.addColorStop(1, '#5a4030');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 4, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  return tex;
+}
 
 function buildSwordMesh() {
   const g = new THREE.Group();
@@ -1231,6 +1318,15 @@ function buildCultivator() {
   P.backSword.rotation.set(0.55, 0, -0.25);
   group.add(P.backSword);
 
+  // v2.12: 背后飘带（仙侠标志元素，随呼吸摆动）
+  P.ribbonL = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 1.0),
+    new THREE.MeshPhongMaterial({ color: REALM_LOOK[0].robe, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }));
+  P.ribbonL.position.set(-0.15, 1.02, -0.26);
+  P.ribbonL.rotation.x = 0.18;
+  P.ribbonR = P.ribbonL.clone();
+  P.ribbonR.position.x = 0.15;
+  group.add(P.ribbonL); group.add(P.ribbonR);
+
   // 光环
   P.halo = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.018, 8, 28), mat(0xf0d070, { emissive: 0x8a6a10, transparent: true, opacity: 0.9 }));
   P.halo.rotation.x = Math.PI / 2; P.halo.position.y = 1.98;
@@ -1293,6 +1389,8 @@ function applyRealmLook(idx) {
   const P = player.parts, L = REALM_LOOK[idx] || REALM_LOOK[9];
   P.robe.material.color.setHex(L.robe);
   P.belt.material.color.setHex(L.belt);
+  // v2.12: 飘带随境界同步换色
+  if (P.ribbonL) { P.ribbonL.material.color.setHex(L.robe); P.ribbonR.material.color.setHex(L.robe); }
   P.aura.material.color.setHex(L.rim);
   P.hairpin.material.color.setHex(idx >= 1 ? GOLD : 0x6b665a);
   P.halo.visible = idx >= 2;
@@ -1491,6 +1589,13 @@ function updateAnims(dt, t) {
     P.orbit.rotation.y += dt * 0.85;
     P.orbit.position.y = 1.45 + Math.sin(t * 1.2) * 0.05;
     P.backSword.rotation.z = -0.25 + Math.sin(t * 0.8) * 0.03;
+    // v2.12: 飘带随呼吸摆动
+    if (P.ribbonL) {
+      P.ribbonL.rotation.x = 0.18 + Math.sin(t * 1.9) * 0.09;
+      P.ribbonL.position.y = 1.02 + Math.sin(t * 1.3) * 0.02;
+      P.ribbonR.rotation.x = 0.18 + Math.sin(t * 1.9 + 0.6) * 0.09;
+      P.ribbonR.position.y = 1.02 + Math.sin(t * 1.3 + 0.6) * 0.02;
+    }
     P.darkAura.material.opacity = (lastRealm === 8 ? 0.28 : 0) + (tribDark * 0.15);
     P.darkAura.scale.setScalar(1 + Math.sin(t * 3) * 0.06);
     // 天劫乌云压顶
@@ -1745,14 +1850,21 @@ function statusChips(r) {
 }
 
 /* ---------- Modal ---------- */
-function renderEventModal() {
+function renderEventStack() {
   const r = G.run;
-  if (!r || !r.pendingEvent) { $('evtOverlay').classList.add('hidden'); return; }
-  const ev = r.pendingEvent;
-  $('evtModal').innerHTML = '<div class="evt-title">' + ev.title + '</div><div class="evt-desc">' + ev.desc + '</div>' +
-    ev.choices.map((c, i) => '<button class="evt-choice" data-a="evt:' + i + '" ' + (c.need() ? '' : 'disabled') + '>' + c.label() + '</button>').join('') +
-    '<button class="evt-dismiss" data-a="evt:dismiss">缘起缘灭，就此作罢</button>';
-  $('evtOverlay').classList.remove('hidden');
+  const stack = $('evtStack');
+  if (!stack) return;
+  if (!r || !r.events || !r.events.length) { stack.innerHTML = ''; return; }
+  // v2.11: 右下角非模态卡片堆叠（最多 3 个，可逐个处理）
+  stack.innerHTML = r.events.map((ev, ei) =>
+    '<div class="evt-card">' +
+    '<div class="evt-title">' + ev.title + '</div>' +
+    '<div class="evt-desc">' + ev.desc + '</div>' +
+    '<div class="evt-choices">' +
+    ev.choices.map((c, i) => '<button class="evt-choice" data-a="evt:' + ei + ':' + i + '" ' + (c.need() ? '' : 'disabled') + '>' + c.label() + '</button>').join('') +
+    '</div>' +
+    '<button class="evt-dismiss" data-a="evt:' + ei + ':dismiss">缘起缘灭，就此作罢</button>' +
+    '</div>').join('');
 }
 function showEndModal(data) {
   const m = $('endModal');
@@ -1814,7 +1926,7 @@ function pickBoonUI(i) {
 /* ---------- 钩子接线 ---------- */
 function wireHooks() {
   __core.hooks.onLog = addLog;
-  __core.hooks.onEvent = () => { renderEventModal(); sparkle(0x6ec8e0, 10); };
+  __core.hooks.onEvent = () => { sparkle(0x6ec8e0, 10); };
   __core.hooks.onBeastWarn = w => {
     const bar = $('beastWarnBar');
     if (!bar) return; // 防御：元素缺失时不崩溃（v2.10）
@@ -1852,7 +1964,8 @@ function wireHooks() {
   __core.hooks.onPill = k => { sparkle(k === 'huichun' ? 0x7fe0b4 : 0x9fd4e4, 8); };
   __core.hooks.onStart = () => { applyRealmLook(0); };
   __core.hooks.onDeath = data => {
-    $('evtOverlay').classList.add('hidden');
+    const st = $('evtStack');
+    if (st) st.innerHTML = '';
     if (data.won) {
       winAnim = { t: 0, shown: false, data: data };
       beep(660, 0.5, 'sine', 0.07);
@@ -1877,10 +1990,11 @@ document.addEventListener('click', e => {
   else if (a.startsWith('pill:')) __core.usePill(a.slice(5));
   else if (a.startsWith('meta:')) { __core.buyMeta(a.slice(5)); showEndModal(lastEndData); }
   else if (a.startsWith('evt:')) {
-    const i = a.slice(4);
-    if (i === 'dismiss') { __core.dismissEvent(); }
-    else { __core.chooseEvent(+i); }
-    $('evtOverlay').classList.add('hidden');
+    const parts = a.slice(4).split(':');
+    const ei = +parts[0];
+    const act = parts[1];
+    if (act === 'dismiss') { __core.dismissEvent(ei); }
+    else { __core.chooseEvent(ei, +act); }
   } else if (a.startsWith('beast:')) {
     __core.beastRespond(a.slice(6));
     $('beastWarnBar').classList.remove('show');
@@ -1955,6 +2069,7 @@ function gameTick() {
   __core.tick(dt * gameSpeed);
   renderHUD();
   renderTabs();
+  renderEventStack();
 }
 setInterval(gameTick, 200);
 setInterval(() => __core.save(), 8000);
@@ -2000,6 +2115,16 @@ if (qp.get('noevent') && G.run) {
 if (qp.get('warn') && G.run) {
   G.run.nextEventIn = 99999;
   setTimeout(() => { if (G.run && !G.run.beastWarn) __core.beastWarn(); }, 400);
+}
+// ?evt=1: 开局填充 3 张不同事件卡片（演示/验证非模态事件队列）
+if (qp.get('evt') && G.run) {
+  const pool = [...EVENTS];
+  for (let i = 0; i < 3 && pool.length; i++) {
+    G.run.events.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  }
+  G.run.nextEventIn = 99999;
+  G.run.nextBeastIn = 99999;
+  hooks.onLog('演示模式：三张机缘卡已就位，随时可处理。','event');
 }
 const speedP = parseFloat(qp.get('speed') || '1');
 if (speedP > 0 && speedP !== 1) gameSpeed = speedP;
