@@ -180,6 +180,14 @@
 <div id="sceneWrap"></div>
 <div id="vignette"></div>
 <div id="darken"></div>
+<div id="beastWarnBar" class="beast-warn">
+  <div class="bw-text"><span id="bwIcon">⚠</span> 妖气逼近：<b id="bwName"></b> 正朝你袭来</div>
+  <div class="bw-actions">
+    <button class="btn btn-small" data-a="beast:fight">迎战</button>
+    <button class="btn btn-small" data-a="beast:avoid">避战</button>
+  </div>
+  <div class="bw-bar"><div id="bwFill"></div></div>
+</div>
 <div id="flash"></div>
 <div id="fxText"></div>
 
@@ -1654,12 +1662,16 @@ function renderHUD() {
   const panel = $('tribPanel');
   // 妖兽预警条倒计时
   const bwBar = $('beastWarnBar');
-  if (r.beastWarn) {
-    bwBar.classList.add('show');
-    $('bwName').textContent = r.beastWarn.name;
-    $('bwFill').style.width = (r.beastWarn.ttl / 8 * 100) + '%';
-  } else {
-    bwBar.classList.remove('show');
+  if (bwBar) {
+    if (r.beastWarn) {
+      bwBar.classList.add('show');
+      const bwName = $('bwName');
+      const bwFill = $('bwFill');
+      if (bwName) bwName.textContent = r.beastWarn.name;
+      if (bwFill) bwFill.style.width = (r.beastWarn.ttl / 8 * 100) + '%';
+    } else {
+      bwBar.classList.remove('show');
+    }
   }
   if (!r.tribOpen) { panel.style.display = 'none'; return; }
   panel.style.display = 'block';
@@ -1805,7 +1817,9 @@ function wireHooks() {
   __core.hooks.onEvent = () => { renderEventModal(); sparkle(0x6ec8e0, 10); };
   __core.hooks.onBeastWarn = w => {
     const bar = $('beastWarnBar');
-    $('bwName').textContent = w.name;
+    if (!bar) return; // 防御：元素缺失时不崩溃（v2.10）
+    const nm = $('bwName');
+    if (nm) nm.textContent = w.name;
     bar.classList.add('show');
     // 远处出现妖兽（站立踱步）
     if (!beast) {
