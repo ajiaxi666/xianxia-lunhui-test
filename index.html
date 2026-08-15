@@ -1996,6 +1996,11 @@ if (qp.get('noevent') && G.run) {
   G.run.nextEventIn = 99999;
   G.run.nextBeastIn = 99999;
 }
+// ?warn=1: 开局立即触发一次妖兽预警（演示/验证预警条）
+if (qp.get('warn') && G.run) {
+  G.run.nextEventIn = 99999;
+  setTimeout(() => { if (G.run && !G.run.beastWarn) __core.beastWarn(); }, 400);
+}
 const speedP = parseFloat(qp.get('speed') || '1');
 if (speedP > 0 && speedP !== 1) gameSpeed = speedP;
 // 已有存档且在世 → 同步装扮
