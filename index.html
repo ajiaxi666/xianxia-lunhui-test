@@ -267,6 +267,8 @@
     <button class="tab on" data-a="tab:arts">洞府</button>
     <button class="tab" data-a="tab:pills">丹药</button>
     <button class="tab" data-a="tab:relics">法宝</button>
+    <button class="tab" data-a="tab:quest">修行</button>
+    <button class="tab" data-a="tab:explore">探索</button>
   </div>
   <div id="tabBody"></div>
 </div>
@@ -476,10 +478,35 @@ const EVENTS = [
     ]}
 ];
 
+/* ---------- v3.0 探索区域 / 功法树 / 里程碑 ---------- */
+const AREAS = [
+  { n:'青牛山',   need:0, dur:60,  desc:'山清水秀，妖兽稀少，适合初入修行者历练' },
+  { n:'幽谷迷林', need:1, dur:90,  desc:'迷雾缭绕的古林，传闻有灵药与山精出没' },
+  { n:'古墓秘境', need:2, dur:120, desc:'上古修士墓穴，陪葬法宝与机关并存' },
+  { n:'妖窟深渊', need:3, dur:150, desc:'妖气冲天的深渊，斩杀妖王可获重宝' },
+  { n:'天外秘境', need:5, dur:180, desc:'云海之上的浮岛，灵气浓郁，机缘无数' },
+  { n:'九霄天宫', need:8, dur:240, desc:'仙人遗迹，一步一机缘，也一步一凶险' }
+];
+const SKILLS = {
+  jianyi: { n:'剑意',   d:'战力 +6%/级',    base:30, mul:2, max:5 },
+  dandao: { n:'丹道',   d:'丹药价格 -8%/级', base:30, mul:2, max:5 },
+  tixiu:  { n:'体修',   d:'突破寿元奖励 +8%/级', base:30, mul:2, max:5 }
+};
+const MILESTONES = [
+  { id:'m1', type:'realm',  target:2,         desc:'抵达金丹',       reward:'灵石500' },
+  { id:'m2', type:'realm',  target:4,         desc:'抵达化神',       reward:'悟性点100' },
+  { id:'m3', type:'realm',  target:6,         desc:'抵达合体',       reward:'天雷丹×2' },
+  { id:'m4', type:'kills',  target:20,        desc:'斩妖 20 次',     reward:'灵石1000' },
+  { id:'m5', type:'events', target:30,        desc:'经历奇遇 30 次', reward:'回春丹×3' },
+  { id:'m6', type:'trib',   target:5,         desc:'渡劫成功 5 次',  reward:'增寿丹×2' },
+  { id:'m7', type:'xiuwei', target:10000000,  desc:'累计修为 1000 万', reward:'悟性点200' }
+];
+
 /* ---------- 回调钩子（渲染层注入） ---------- */
 const hooks = {
   onLog(){}, onEvent(){}, onBeast(){}, onBeastWarn(){}, onTribOpen(){}, onTrib(){},
-  onRealm(){}, onDeath(){}, onStart(){}, onPill(){}, onBoon(){}
+  onRealm(){}, onDeath(){}, onStart(){}, onPill(){}, onBoon(){},
+  onExplore(){}, onMilestone(){}
 };
 
 /* ---------- 存档 ---------- */
@@ -529,12 +556,20 @@ function mergeRunDefaults(run, meta){
     pills:{ juqi:(m.chuanjia||0), zengshou:0, wudao:0, huichun:0, tianlei:0 },
     stats:{ events:0, kills:0, layers:0 },
     events:[], lastEvents:[], nextEventIn:8, nextBeastIn:25,
+    quest:{ focus:'xiu', wuPoints:0, frags:0, skills:{ jianyi:0, dandao:0, tixiu:0 } },
+    explore:{ area:0, progress:0 },
+    milestones:{},
     won:false, dao:0
   };
   const out = Object.assign({}, base, run || {});
   for (const k of ['arts','relics','pills','stats']) {
     out[k] = Object.assign({}, base[k], (run && run[k]) || {});
   }
+  // v3.0: 嵌套对象兜底
+  if(!out.quest) out.quest={ focus:'xiu', wuPoints:0, frags:0, skills:{ jianyi:0, dandao:0, tixiu:0 } };
+  else out.quest = Object.assign({ focus:'xiu', wuPoints:0, frags:0, skills:{ jianyi:0, dandao:0, tixiu:0 } }, out.quest);
+  if(!out.explore) out.explore={ area:0, progress:0 };
+  if(!out.milestones) out.milestones={};
   return out;
 }
 function load(){
@@ -584,12 +619,33 @@ function xiuPerSec(){
   const r=G.run; if(!r) return 0;
   let x=qiPerSec()*0.5*(1+0.08*G.meta.wuxing)*REALM_XIU[r.realm]*(r.stele?1.15:1);
   if(r.buffXiu>0) x*=2;
+  // v3.0: 主修吐纳时修为 ×1.25（主动选择权，温和加速）
+  if(r.quest&&r.quest.focus==='xiu') x*=1.25;
   return x;
+}
+// v3.0: 悟性点（参悟）/ 法宝碎片（炼器）产出
+function wuPerSec(){
+  const r=G.run; if(!r) return 0;
+  let w=xiuPerSec()*0.15;
+  if(r.quest&&r.quest.focus==='wu') w*=2;
+  return w;
+}
+function fragPerSec(){
+  const r=G.run; if(!r) return 0;
+  let f=qiPerSec()*0.008; // v3.0: 炼器碎片产出（防法宝通胀，原 0.08 过猛）
+  if(r.quest&&r.quest.focus==='qi') f*=2;
+  return f;
+}
+function fragNeed(){
+  const r=G.run; if(!r) return 1000;
+  return 1000*(1+r.realm); // 合成门槛随境界提升
 }
 function power(){
   const r=G.run; if(!r) return 0;
   let p=(15+8*r.arts.yujian+4*r.arts.jingang)*REALM_POW[r.realm];
   p*=(r.relics.qingfeng?1.3:1)*(r.swordBoon?1.5:1);
+  // v3.0: 剑意被动（功法树）
+  if(r.quest&&r.quest.skills) p*=(1+0.06*r.quest.skills.jianyi);
   if(r.buffPower>0) p*=1.25;
   if(r.injured>0) p*=0.6;
   if(r.shicuo>0) p*=0.85;
@@ -636,7 +692,9 @@ function loseLife(m){ const r=G.run; if(!r) return; r.lifespan-=m; }
 function givePill(k){ G.run.pills[k]++; }
 function pillPrice(k){
   const r=G.run; if(!r) return 0;
-  return Math.max(1, Math.round(PILLS[k].base*(1+0.8*r.realm)*(1-0.08*r.arts.danlu)));
+  // v3.0: 丹道被动降价
+  const danMul=(r.quest&&r.quest.skills)?(1-0.08*r.quest.skills.dandao):1;
+  return Math.max(1, Math.round(PILLS[k].base*(1+0.8*r.realm)*(1-0.08*r.arts.danlu)*danMul));
 }
 function giveRandomRelic(){
   const r=G.run; if(!r) return '';
@@ -719,9 +777,10 @@ function tribulate(){
   if(Math.random()<rate){
     const need=needXiu();
     r.xiuwei-=need; r.realm++; r.layer=0; r.stats.layers++;
-    // v2.3: 寿元奖励随境界递增；渡劫境（最后冲刺）额外加码 +38 年
-    const lifeBonus = (r.realm >= 8 ? 32 : 8 + r.realm * 3) * 12;
+    // v2.3: 寿元奖励随境界递增；渡劫境（最后冲刺）额外加码 +32 年；v3.0 体修被动加成
+    const lifeBonus = Math.round((r.realm >= 8 ? 32 : 8 + r.realm * 3) * 12 * (r.quest && r.quest.skills ? (1 + 0.08 * r.quest.skills.tixiu) : 1));
     addLife(lifeBonus); r.sense=Math.min(1.5, r.sense+0.1);
+    r.stats.tribs=(r.stats.tribs||0)+1;
     const s=gainStone(100*(1+0.6*r.realm));
     hooks.onLog('天雷淬体，成功突破至【'+target.n+'】！寿元 +'+(r.realm >= 8 ? 32 : 8 + r.realm * 3)+' 年，感悟渐深（灵气 +10%），灵石 ×'+s+'。','trib');
     hooks.onTrib({ kind:'success', rate:rate, realm:r.realm });
@@ -837,6 +896,65 @@ function beastRespond(mode){
   save();
 }
 
+/* ---------- v3.0 修行队列 / 功法树 / 探索 / 里程碑 ---------- */
+function setFocus(f){
+  const r=G.run; if(!r||!r.quest) return;
+  if(f!=='xiu'&&f!=='wu'&&f!=='qi') return;
+  r.quest.focus=f;
+  hooks.onLog('专注'+(f==='wu'?'参悟':f==='qi'?'炼器':'吐纳')+'……','sys');
+  save();
+}
+function skillCost(k){
+  const r=G.run; if(!r) return 0;
+  const s=SKILLS[k];
+  return Math.round(s.base*Math.pow(s.mul, r.quest.skills[k]));
+}
+function buySkill(k){
+  const r=G.run; if(!r||!r.quest) return;
+  const s=SKILLS[k];
+  if(r.quest.skills[k]>=s.max) return;
+  const c=skillCost(k);
+  if(r.quest.wuPoints<c) return;
+  r.quest.wuPoints-=c;
+  r.quest.skills[k]++;
+  hooks.onLog('参悟【'+s.n+'】至 '+r.quest.skills[k]+' 级！','gain');
+  save();
+}
+function setArea(i){
+  const r=G.run; if(!r||!r.explore) return;
+  if(!AREAS[i]) return;
+  if(r.realm<AREAS[i].need) return;
+  r.explore.area=i;
+  r.explore.progress=0;
+  hooks.onLog('前往【'+AREAS[i].n+'】探索……','sys');
+  save();
+}
+function checkMilestones(r){
+  if(!r||!r.milestones) return;
+  for(const m of MILESTONES){
+    if(r.milestones[m.id]) continue;
+    let done=false;
+    if(m.type==='realm'&&r.realm>=m.target) done=true;
+    else if(m.type==='kills'&&r.stats.kills>=m.target) done=true;
+    else if(m.type==='events'&&r.stats.events>=m.target) done=true;
+    else if(m.type==='trib'&&(r.stats.tribs||0)>=m.target) done=true;
+    else if(m.type==='xiuwei'&&r.totalXiu>=m.target) done=true;
+    if(done){
+      r.milestones[m.id]=true;
+      const rw=m.reward;
+      if(rw.indexOf('灵石')===0){ gainStone(parseInt(rw.slice(2),10)); }
+      else if(rw.indexOf('悟性点')===0){ r.quest.wuPoints+=parseInt(rw.slice(3),10); }
+      else if(rw.indexOf('×')>=0){
+        const parts=rw.split('×');
+        const pk=parts[0]==='天雷丹'?'tianlei':parts[0]==='回春丹'?'huichun':parts[0]==='增寿丹'?'zengshou':parts[0]==='聚气丹'?'juqi':'wudao';
+        r.pills[pk]+=parseInt(parts[1],10);
+      }
+      hooks.onLog('【里程碑达成】'+m.desc+'：奖励 '+m.reward+'！','dao');
+      hooks.onMilestone(m);
+    }
+  }
+}
+
 /* ---------- 轮回 ---------- */
 function daoGain(){
   const r=G.run; if(!r) return 0;
@@ -881,6 +999,10 @@ function newRunObject(){
     pills:{ juqi:G.meta.chuanjia, zengshou:0, wudao:0, huichun:0, tianlei:0 },
     stats:{ events:0, kills:0, layers:0 },
     events:[], lastEvents:[], nextEventIn:8, nextBeastIn:25,
+    // v3.0: 修行队列（三线并行）、探索、里程碑
+    quest:{ focus:'xiu', wuPoints:0, frags:0, skills:{ jianyi:0, dandao:0, tixiu:0 } },
+    explore:{ area:0, progress:0 },
+    milestones:{},
     won:false, dao:0
   };
 }
@@ -943,6 +1065,33 @@ function tick(dt){
       r.nextBeastIn=50+Math.random()*25; // v2.16: 预警间隔放宽（原 40±25s）
     }
   }
+  // v3.0: 修行队列（悟性点/炼器碎片）+ 探索 + 里程碑
+  if(r.quest){
+    r.quest.wuPoints += wuPerSec()*dt;
+    r.quest.frags += fragPerSec()*dt;
+    const fNeed=fragNeed();
+    if(r.quest.frags>=fNeed){
+      r.quest.frags-=fNeed;
+      const rel=giveRandomRelic();
+      hooks.onLog('炼器功成！淬炼出『'+rel+'』！','gain');
+    }
+  }
+  if(r.explore){
+    const ar=AREAS[r.explore.area];
+    if(ar&&r.realm>=ar.need){
+      r.explore.progress += dt/ar.dur*100;
+      if(r.explore.progress>=100){
+        r.explore.progress=0;
+        const st=gainStone(Math.round((40+80*Math.min(r.realm,8))*(0.8+Math.random()*0.6)));
+        hooks.onLog('探索【'+ar.n+'】归来：收获灵石 ×'+st+'。','gain');
+        const dd=Math.random();
+        if(dd<0.25){ const pk=pick(['juqi','huichun','zengshou']); givePill(pk); hooks.onLog('并在秘境中寻得一枚'+PILLS[pk].n+'！','gain'); }
+        else if(dd<0.33){ const rel=giveRandomRelic(); hooks.onLog('还在秘境中觅得『'+rel+'』！','gain'); }
+        hooks.onExplore(ar.n);
+      }
+    }
+  }
+  checkMilestones(r);
   if(r.beastWarn){ r.beastWarn.ttl-=dt; if(r.beastWarn.ttl<=0){ r.beastWarn=null; hooks.onLog('妖兽徘徊许久，自行离去。','sys'); } }
   r.lifespan-=dt;
   if(r.lifespan<=0){ r.lifespan=0; endRun(false, '寿元耗尽，兵解于深山道观……'); }
@@ -971,6 +1120,8 @@ const __core = {
   qiPerSec, xiuPerSec, power, needXiu, jieLi, jieRate, realmName,
   meditate, artCost, buyArt, metaCost, buyMeta, usePill, doBreak, tribulate,
   rollEvent, chooseEvent, dismissEvent, beastFight, beastWarn, beastRespond,
+  setFocus, skillCost, buySkill, setArea, checkMilestones,
+  AREAS, SKILLS, MILESTONES, wuPerSec, fragPerSec,
   daoGain, endRun, openBoonChoices, pickBoon, resetAll, tick,
   BOONS, EVENTS, REALMS, ARTS, PILLS, META, RELIC_DEFS
 };
@@ -1908,7 +2059,58 @@ function renderTabs() {
       const owned = k === 'tifu' ? r.relics.tifu : r.relics[k];
       return '<div class="row"><div class="info"><div class="n">' + rd.n + (k === 'tifu' ? ' ×' + r.relics.tifu : '') + '</div><div class="d">' + rd.d + '</div></div>' +
         (owned ? '<span class="chip on-gold">已得</span>' : '<span class="chip">未得</span>') + '</div>';
-    }).join('') + '<div class="hint">法宝可通过奇遇、斩妖、商人或渡劫获得。替死符在渡劫失败时消耗并免死一次。</div>';
+    }).join('') + '<div class="hint">法宝可通过奇遇、斩妖、商人、炼器（修行-炼器）或渡劫获得。替死符在渡劫失败时消耗并免死一次。</div>';
+  } else if (activeTab === 'quest') {
+    // v3.0: 修行队列三线 + 功法树 + 里程碑
+    const q = r.quest;
+    const focusName = q.focus === 'wu' ? '参悟' : q.focus === 'qi' ? '炼器' : '吐纳';
+    const lines = [
+      { k: 'xiu', n: '吐纳', d: '修为 +' + fmt(xiuPerSec()) + '/s', note: q.focus === 'xiu' ? '×1.5 主修中' : '' },
+      { k: 'wu', n: '参悟', d: '悟性点 +' + fmt(wuPerSec()) + '/s', note: q.focus === 'wu' ? '×2 主修中' : '' },
+      { k: 'qi', n: '炼器', d: '法宝碎片 +' + fmt(fragPerSec()) + '/s（' + Math.floor(q.frags) + '/' + fmt(fragNeed()) + '）', note: q.focus === 'qi' ? '×2 主修中' : '' }
+    ];
+    body.innerHTML =
+      '<div class="hint" style="margin-top:0">当前专注：<b style="color:var(--gold2)">' + focusName + '</b>——主修线获得加成，随时可切换</div>' +
+      lines.map(l =>
+        '<div class="row"><div class="info"><div class="n">' + l.n + ' ' + (l.note ? '<span class="chip on-gold">' + l.note + '</span>' : '') + '</div><div class="d">' + l.d + '</div></div>' +
+        '<button class="btn btn-small" data-a="focus:' + l.k + '" ' + (q.focus === l.k ? 'disabled' : '') + '>专注</button></div>').join('') +
+      '<div class="card-title" style="margin-top:10px">功法参悟（悟性点 ' + Math.floor(q.wuPoints) + '）</div>' +
+      Object.keys(SKILLS).map(k => {
+        const s = SKILLS[k], lv = q.skills[k], maxed = lv >= s.max, c = skillCost(k);
+        return '<div class="row"><div class="info"><div class="n">' + s.n + '</div><div class="d">' + s.d + '</div></div>' +
+          '<div class="lv">' + lv + '/' + s.max + '</div>' +
+          (maxed ? '<span class="chip on-gold">圆满</span>' :
+            '<div class="cost' + (q.wuPoints < c ? ' no' : '') + '">' + c + '</div>' +
+            '<button class="btn btn-small" data-a="skill:' + k + '" ' + (q.wuPoints < c ? 'disabled' : '') + '>参悟</button>') +
+          '</div>';
+      }).join('') +
+      '<div class="card-title" style="margin-top:10px">修行里程碑</div>' +
+      MILESTONES.map(m => {
+        const done = !!r.milestones[m.id];
+        let prog = '';
+        if (m.type === 'realm') prog = '境界 ' + (r.realm >= m.target ? '达成' : REALMS[m.target].n + ' 未达');
+        else if (m.type === 'kills') prog = '斩妖 ' + r.stats.kills + '/' + m.target;
+        else if (m.type === 'events') prog = '奇遇 ' + r.stats.events + '/' + m.target;
+        else if (m.type === 'trib') prog = '渡劫 ' + (r.stats.tribs || 0) + '/' + m.target;
+        else if (m.type === 'xiuwei') prog = '修为 ' + fmt(r.totalXiu) + '/' + fmt(m.target);
+        return '<div class="row"><div class="info"><div class="n">' + m.desc + '</div><div class="d">奖励：' + m.reward + ' · ' + prog + '</div></div>' +
+          (done ? '<span class="chip on-jade">已达成</span>' : '<span class="chip">进行中</span>') + '</div>';
+      }).join('');
+  } else if (activeTab === 'explore') {
+    // v3.0: 探索区域
+    const ex = r.explore;
+    body.innerHTML = '<div class="hint" style="margin-top:0">选择区域自动探索，归来获得灵石与机缘；高境界区域奖励更丰厚</div>' +
+      AREAS.map((a, i) => {
+        const unlocked = r.realm >= a.need;
+        const current = ex.area === i;
+        const pct = current ? Math.floor(ex.progress) : 0;
+        return '<div class="row"><div class="info"><div class="n">' + a.n + (current ? ' <span class="chip on-jade">探索中</span>' : '') + '</div>' +
+          '<div class="d">' + a.d + (unlocked ? ' · 每次约 ' + fmt(100 + 200 * Math.min(r.realm, 8)) + ' 灵石' : ' · 需 ' + REALMS[a.need].n + ' 境') + '</div>' +
+          (current ? '<div class="bar" style="width:70px;height:6px;margin:0 6px"><div class="gold" style="width:' + pct + '%"></div></div>' : '') +
+          '</div>' +
+          (unlocked && !current ? '<button class="btn btn-small" data-a="area:' + i + '">前往</button>' : '') +
+          '</div>';
+      }).join('');
   }
 }
 function statusChips(r) {
@@ -2050,6 +2252,9 @@ function wireHooks() {
     sparkle(REALM_LOOK[idx].rim, 20);
     beep(440 + idx * 60, 0.3, 'sine', 0.06);
   };
+  // v3.0: 探索归来与里程碑达成反馈
+  __core.hooks.onExplore = n => { sparkle(0x7fe0b4, 12); beep(520, 0.15, 'sine', 0.05); };
+  __core.hooks.onMilestone = m => { fx('里程碑：' + m.desc); sparkle(0xf0d070, 18); beep(660, 0.3, 'sine', 0.06); setTimeout(() => beep(880, 0.4, 'sine', 0.06), 180); };
   __core.hooks.onPill = k => { sparkle(k === 'huichun' ? 0x7fe0b4 : 0x9fd4e4, 8); };
   __core.hooks.onStart = () => { applyRealmLook(0); };
   __core.hooks.onDeath = data => {
@@ -2089,7 +2294,9 @@ document.addEventListener('click', e => {
     $('beastWarnBar').classList.remove('show');
     // 避战时让妖兽转身离去
     if (a.slice(6) === 'avoid' && beast && beast.phase === 'stand') { beast.phase = 'flee'; beast.t = 0; }
-  } else if (a.startsWith('boon:')) pickBoonUI(+a.slice(5));
+  } else if (a.startsWith('focus:')) { __core.setFocus(a.slice(6)); renderTabs(); }
+  else if (a.startsWith('skill:')) { __core.buySkill(a.slice(6)); renderTabs(); }
+  else if (a.startsWith('area:')) { __core.setArea(+a.slice(5)); renderTabs(); } else if (a.startsWith('boon:')) pickBoonUI(+a.slice(5));
   else if (a === 'reset') {
     if (confirm('确定抹去所有道果与记忆，重开仙途？')) {
       __core.resetAll();
