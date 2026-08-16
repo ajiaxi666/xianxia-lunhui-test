@@ -1870,7 +1870,11 @@ function renderHUD() {
     (r.curse ? '<br><span style="color:#e88a82">遗蜕诅咒缠身（劫力 +30%）</span>' : '') +
     '<br><span style="color:#8a8578;font-size:11px">失败：替死符免死一次；成功率 ≥45%（筑基首劫无论成败）重伤存活，否则兵解</span>';
 }
+let tabTick = 0;
 function renderTabs() {
+  // v2.19: 商店面板节流——每 1s 重建一次（原每 200ms 全量重建，hover/闪烁隐患）
+  tabTick++;
+  if (tabTick % 5 !== 0) return;
   const r = G.run;
   const body = $('tabBody');
   if (!r) { body.innerHTML = '<div class="hint">尚未入轮回。请先开启一世修行。</div>'; return; }
@@ -1918,18 +1922,29 @@ function statusChips(r) {
 }
 
 /* ---------- Modal ---------- */
+let lastEvtSig = '';
 function renderEventStack() {
   const r = G.run;
   const stack = $('evtStack');
   if (!stack) return;
-  if (!r || !r.events || !r.events.length) { stack.innerHTML = ''; return; }
-  // v2.11/v2.17: 右下角非模态卡片堆叠（最多 3 个）；带 TTL 倒计时，超时自动消散
+  if (!r || !r.events || !r.events.length) {
+    if (lastEvtSig !== '') { stack.innerHTML = ''; lastEvtSig = ''; }
+    return;
+  }
+  // v2.19: 签名驱动——队列内容不变（含 30s 消散阈值）就不重建 DOM，消除每秒重绘闪烁
+  // 兼容包装对象 {ev,ttl} 与裸事件对象（演示参数直接 push 裸事件）
+  const sig = r.events.map(w => {
+    const ev = (w && w.ev) ? w.ev : w;
+    const ttl = (w && w.ttl) || 120;
+    return (ev && ev.id ? ev.id : '?') + (ttl <= 30 ? '!' : '');
+  }).join('|');
+  if (sig === lastEvtSig) return;
+  lastEvtSig = sig;
   stack.innerHTML = r.events.map((w, ei) => {
     const ev = w && w.ev ? w.ev : w;
     if (!ev) return '';
-    const ttl = Math.max(0, Math.ceil(w.ttl || 120));
-    // v2.18: 倒计时小字仅剩 30s 内显示（平时不跳动，降噪）
-    const ttlTag = ttl <= 30 ? ' <span class="evt-ttl">' + ttl + 's</span>' : '';
+    // v2.19: 倒计时不跳秒——仅剩 30s 内显示静态「即将消散」提示
+    const ttlTag = w.ttl <= 30 ? ' <span class="evt-ttl">即将消散</span>' : '';
     return '<div class="evt-card">' +
     '<div class="evt-title">' + ev.title + ttlTag + '</div>' +
     '<div class="evt-desc">' + ev.desc + '</div>' +
