@@ -510,6 +510,31 @@ function save(){
     }
   }catch(e){}
 }
+function mergeRunDefaults(run, meta){
+  // v2.15: 读档字段默认值合并——旧存档缺字段时消除 NaN/undefined 显示瑕疵
+  const m = meta || {};
+  const base = {
+    rootMult:1, swordBoon:false, guiBoon:false,
+    realm:0, layer:0, xiuwei:0, totalXiu:0,
+    lingshi:(m.jiadi||0)*100,
+    lifespan:(70+(m.shouyuan||0)*5)*12, lifespanMax:(70+(m.shouyuan||0)*5)*12,
+    month:0,
+    sense:0, plant:false, stele:false, curse:false, tianleiReady:false, tribOpen:false,
+    beastWarn:null,
+    buffQi:0, buffXiu:0, buffPower:0, injured:0, shicuo:0,
+    arts:{ zhen:0, dongfu:0, yujian:0, jingang:0, xinfa:0, danlu:0 },
+    relics:{ qingfeng:false, xuangui:false, zhuli:false, qiankun:false, tifu:0 },
+    pills:{ juqi:(m.chuanjia||0), zengshou:0, wudao:0, huichun:0, tianlei:0 },
+    stats:{ events:0, kills:0, layers:0 },
+    events:[], lastEvents:[], nextEventIn:8, nextBeastIn:25,
+    won:false, dao:0
+  };
+  const out = Object.assign({}, base, run || {});
+  for (const k of ['arts','relics','pills','stats']) {
+    out[k] = Object.assign({}, base[k], (run && run[k]) || {});
+  }
+  return out;
+}
 function load(){
   try{
     const raw=storeGet(SAVE_KEY);
@@ -527,6 +552,8 @@ function load(){
         // v2.13: 兜底——任何情况下 events 必须是数组（旧/异常存档防御，防止渲染层崩溃）
         if(d.run&&!Array.isArray(d.run.events)) d.run.events = [];
         if(d.run&&!Array.isArray(d.run.lastEvents)) d.run.lastEvents = [];
+        // v2.15: 逐字段默认值合并（消除 NaN/undefined 显示瑕疵）
+        if(d.run) d.run = mergeRunDefaults(d.run, d.meta);
         return d;
       }
     }
