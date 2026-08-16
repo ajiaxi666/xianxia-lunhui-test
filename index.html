@@ -271,7 +271,7 @@
 <button class="btn btn-small panel-toggle" id="btnToggleR">☰ 商店</button>
 
 <div id="evtStack"></div>
-<div class="overlay" id="endOverlay"><div class="modal" id="endModal"></div></div>
+<div class="overlay hidden" id="endOverlay"><div class="modal" id="endModal"></div></div>
 <div class="overlay hidden" id="boonOverlay"><div class="modal" id="boonModal"></div></div>
 <div class="overlay hidden" id="helpOverlay"><div class="modal">
   <div class="m-title">玩法说明</div>
@@ -2135,6 +2135,8 @@ if (speedP > 0 && speedP !== 1) gameSpeed = speedP;
 if (G.run) {
   applyRealmLook(Math.min(G.run.realm, 9));
   addLog('道体复苏，续接前世修行。', 'sys');
+  // v2.14: 有存档时强制隐藏轮回殿黑幕（否则空弹窗遮屏，表现为黑屏+横条）
+  $('endOverlay').classList.add('hidden');
 } else {
   showEndModal(null);
 }
